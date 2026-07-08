@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="docTalkMarkTitle">
+  <title id="docTalkMarkTitle">DocTalk placeholder logo mark</title>
+  <rect width="48" height="48" rx="11.5" fill="#4F46E5" />
+  <g fill="#FFFFFF">
+    <rect x="12.5" y="20.5" width="4" height="7" rx="2" />
+    <rect x="19.5" y="14" width="4" height="20" rx="2" />
+    <rect x="26.5" y="10.5" width="4" height="27" rx="2" />
+    <rect x="33.5" y="17" width="4" height="14" rx="2" />
+  </g>
+</svg>

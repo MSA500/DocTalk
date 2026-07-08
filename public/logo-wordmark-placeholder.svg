@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 40" role="img" aria-labelledby="docTalkWordmarkTitle">
+  <title id="docTalkWordmarkTitle">DocTalk placeholder logo</title>
+  <rect x="0" y="0" width="40" height="40" rx="9.5" fill="#4F46E5" />
+  <g fill="#FFFFFF">
+    <rect x="10.5" y="17" width="3.4" height="6" rx="1.7" />
+    <rect x="16.5" y="11.5" width="3.4" height="17" rx="1.7" />
+    <rect x="22.5" y="8.5" width="3.4" height="23" rx="1.7" />
+    <rect x="28.5" y="14" width="3.4" height="12" rx="1.7" />
+  </g>
+  <text
+    x="50"
+    y="27"
+    font-family="ui-sans-serif, system-ui, Segoe UI, Arial, sans-serif"
+    font-size="20"
+    font-weight="700"
+    fill="#14121F"
+  >DocTalk</text>
+</svg>
