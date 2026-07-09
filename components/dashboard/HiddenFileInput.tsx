@@ -5,6 +5,8 @@ type HiddenFileInputProps = {
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
+const ACCEPTED_FILE_TYPES = ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain";
+
 export function HiddenFileInput({ inputRef, onChange }: HiddenFileInputProps) {
   const inputId = useId();
 
@@ -18,6 +20,7 @@ export function HiddenFileInput({ inputRef, onChange }: HiddenFileInputProps) {
         id={inputId}
         type="file"
         multiple
+        accept={ACCEPTED_FILE_TYPES}
         className="sr-only"
         onChange={onChange}
       />

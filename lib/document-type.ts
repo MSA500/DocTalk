@@ -1,18 +1,14 @@
-import type { DocumentType } from "@/lib/mock-data";
+import type { DocumentFileType } from "@/lib/types/document";
 
-const EXTENSION_MAP: Record<string, DocumentType> = {
+const EXTENSION_MAP: Record<string, DocumentFileType> = {
   pdf: "pdf",
-  doc: "docx",
   docx: "docx",
   txt: "txt",
-  md: "md",
-  markdown: "md",
-  csv: "csv",
 };
 
-export function getDocumentType(filename: string): DocumentType {
+export function getDocumentType(filename: string): DocumentFileType | null {
   const extension = filename.split(".").pop()?.toLowerCase() ?? "";
-  return EXTENSION_MAP[extension] ?? "txt";
+  return EXTENSION_MAP[extension] ?? null;
 }
 
 export function formatFileSize(bytes: number): string {

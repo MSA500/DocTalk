@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { FolderOpen } from "lucide-react";
-import type { MockDocument } from "@/lib/mock-data";
+import { AlertCircle, FolderOpen, Loader2 } from "lucide-react";
+import type { DisplayDocument } from "@/lib/hooks/useDocumentWorkspace";
 import { DocumentCard } from "@/components/dashboard/DocumentCard";
 import { cn } from "@/lib/utils";
 
@@ -15,16 +15,29 @@ const FILTERS: { value: LibraryFilter; label: string }[] = [
 ];
 
 type DocumentLibraryProps = {
-  documents: MockDocument[];
+  documents: DisplayDocument[];
   onRemove: (id: string) => void;
   containScroll?: boolean;
+  isLoading?: boolean;
+  loadError?: string | null;
 };
 
-export function DocumentLibrary({ documents, onRemove, containScroll = false }: DocumentLibraryProps) {
+export function DocumentLibrary({
+  documents,
+  onRemove,
+  containScroll = false,
+  isLoading = false,
+  loadError = null,
+}: DocumentLibraryProps) {
   const [filter, setFilter] = useState<LibraryFilter>("all");
 
   const visibleDocuments = useMemo(
-    () => (filter === "processing" ? documents.filter((doc) => doc.status === "processing") : documents),
+    () =>
+      filter === "processing"
+        ? documents.filter(
+            (doc) => doc.status === "uploading" || doc.status === "extracting" || doc.status === "embedding",
+          )
+        : documents,
     [documents, filter],
   );
 
@@ -62,7 +75,17 @@ export function DocumentLibrary({ documents, onRemove, containScroll = false }: 
           containScroll && "sm:max-h-[28rem] sm:overflow-y-auto sm:overscroll-contain sm:pr-1 lg:max-h-[calc(100vh-14rem)]",
         )}
       >
-        {visibleDocuments.length === 0 ? (
+        {loadError ? (
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-danger/30 py-12 text-center text-danger">
+            <AlertCircle aria-hidden="true" className="h-8 w-8" />
+            <p className="text-sm">{loadError}</p>
+          </div>
+        ) : isLoading ? (
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-12 text-center text-muted-foreground">
+            <Loader2 aria-hidden="true" className="h-8 w-8 animate-spin" />
+            <p className="text-sm">Loading your documents&hellip;</p>
+          </div>
+        ) : visibleDocuments.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

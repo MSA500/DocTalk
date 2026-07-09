@@ -9,8 +9,16 @@ import { VoiceHeroPanel } from "@/components/voice/VoiceHeroPanel";
 import { useDocumentWorkspace } from "@/lib/hooks/useDocumentWorkspace";
 
 export function DashboardContent() {
-  const { documents, handleFilesSelected, handleRemove, fileInputRef, openFilePicker, handleInputChange } =
-    useDocumentWorkspace();
+  const {
+    documents,
+    isLoading,
+    loadError,
+    handleFilesSelected,
+    handleRemove,
+    fileInputRef,
+    openFilePicker,
+    handleInputChange,
+  } = useDocumentWorkspace();
 
   return (
     <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
@@ -60,7 +68,13 @@ export function DashboardContent() {
           </Link>
 
           <div className="mt-4">
-            <DocumentLibrary documents={documents} onRemove={handleRemove} containScroll />
+            <DocumentLibrary
+              documents={documents}
+              onRemove={handleRemove}
+              containScroll
+              isLoading={isLoading}
+              loadError={loadError}
+            />
           </div>
         </section>
       </div>

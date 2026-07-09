@@ -8,8 +8,16 @@ import { HiddenFileInput } from "@/components/dashboard/HiddenFileInput";
 import { useDocumentWorkspace } from "@/lib/hooks/useDocumentWorkspace";
 
 export function DocumentsPageContent() {
-  const { documents, handleFilesSelected, handleRemove, fileInputRef, openFilePicker, handleInputChange } =
-    useDocumentWorkspace();
+  const {
+    documents,
+    isLoading,
+    loadError,
+    handleFilesSelected,
+    handleRemove,
+    fileInputRef,
+    openFilePicker,
+    handleInputChange,
+  } = useDocumentWorkspace();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
@@ -36,7 +44,7 @@ export function DocumentsPageContent() {
       />
 
       <div className="mt-8">
-        <DocumentLibrary documents={documents} onRemove={handleRemove} />
+        <DocumentLibrary documents={documents} onRemove={handleRemove} isLoading={isLoading} loadError={loadError} />
       </div>
     </div>
   );

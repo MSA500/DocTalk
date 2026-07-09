@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mic, Sparkles } from "lucide-react";
+import { Mic } from "lucide-react";
 import { Waveform } from "@/components/voice/Waveform";
 import { VoiceCallOverlay } from "@/components/voice/VoiceCallOverlay";
 
@@ -19,11 +19,6 @@ export function VoiceHeroPanel() {
       </div>
 
       <div className="relative flex flex-col items-center gap-5">
-        <div className="inline-flex items-center gap-2 rounded-full bg-surface-alt px-3 py-1 text-xs font-medium text-muted-foreground">
-          <Sparkles aria-hidden="true" className="h-3.5 w-3.5 text-brand" />
-          Live preview &middot; sample data
-        </div>
-
         <h2 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
           Talk to DocTalk
         </h2>

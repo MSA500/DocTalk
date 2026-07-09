@@ -45,7 +45,7 @@ export function CompactUploadBar({ onFilesSelected, onBrowseClick, className }: 
         <div>
           <p className="text-sm font-medium text-foreground">Upload documents</p>
           <p className="text-xs text-muted-foreground">
-            Drag &amp; drop or browse &mdash; PDF, DOCX, TXT, MD, CSV
+            Drag &amp; drop or browse &mdash; PDF, DOCX, or TXT, up to 15 MB
           </p>
         </div>
       </div>
