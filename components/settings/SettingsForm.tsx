@@ -1,22 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { useTheme } from "next-themes";
-import { KeyRound, Laptop, Moon, Sun } from "lucide-react";
+import { KeyRound, Moon, Sun } from "lucide-react";
 import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils";
-import { useHasMounted } from "@/lib/hooks/useHasMounted";
+import { useTheme } from "@/components/theme/ThemeProvider";
 import { siteConfig } from "@/lib/site-config";
 
 const themeOptions = [
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Laptop },
 ] as const;
 
 export function SettingsForm() {
   const { theme, setTheme } = useTheme();
-  const mounted = useHasMounted();
   const [emailUpdates, setEmailUpdates] = useState(true);
   const [voiceReplies, setVoiceReplies] = useState(false);
 
@@ -65,9 +62,9 @@ export function SettingsForm() {
         <p className="mt-1 text-sm text-muted-foreground">
           {`Choose how ${siteConfig.name} looks on this device.`}
         </p>
-        <div role="radiogroup" aria-labelledby="appearance-heading" className="mt-5 grid grid-cols-3 gap-3">
+        <div role="radiogroup" aria-labelledby="appearance-heading" className="mt-5 grid grid-cols-2 gap-3">
           {themeOptions.map((option) => {
-            const isSelected = mounted && theme === option.value;
+            const isSelected = theme === option.value;
             return (
               <button
                 key={option.value}

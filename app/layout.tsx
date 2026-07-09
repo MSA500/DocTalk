@@ -1,11 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { displayFont, bodyFont } from "@/lib/fonts";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import { AmbientBackground } from "@/components/ui/AmbientBackground";
 import { siteConfig } from "@/lib/site-config";
+import { THEME_COOKIE, isValidTheme } from "@/lib/theme-cookie";
+import { cn } from "@/lib/utils";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
@@ -66,20 +70,26 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const themeCookie = cookieStore.get(THEME_COOKIE)?.value;
+  const theme = isValidTheme(themeCookie) ? themeCookie : "light";
+
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       suppressHydrationWarning
-      className={`${displayFont.variable} ${bodyFont.variable}`}
+      className={cn(displayFont.variable, bodyFont.variable, theme === "dark" && "dark")}
     >
       <body className="flex min-h-screen flex-col antialiased">
         <JsonLd />
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider initialTheme={theme}>
+          <AmbientBackground />
           <a
             href="#main-content"
             className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-foreground"

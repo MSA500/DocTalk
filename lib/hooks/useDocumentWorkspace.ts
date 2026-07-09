@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { UploadArea } from "@/components/dashboard/UploadArea";
-import { DocumentLibrary } from "@/components/dashboard/DocumentLibrary";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { initialMockDocuments, type MockDocument } from "@/lib/mock-data";
 import { formatFileSize, getDocumentType } from "@/lib/document-type";
 
 let nextId = initialMockDocuments.length + 1;
 
-export function DocumentWorkspace() {
+export function useDocumentWorkspace() {
   const [documents, setDocuments] = useState<MockDocument[]>(initialMockDocuments);
   const intervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const intervals = intervalsRef.current;
@@ -61,10 +60,23 @@ export function DocumentWorkspace() {
     setDocuments((docs) => docs.filter((doc) => doc.id !== id));
   }
 
-  return (
-    <div className="space-y-6">
-      <UploadArea onFilesSelected={handleFilesSelected} />
-      <DocumentLibrary documents={documents} onRemove={handleRemove} />
-    </div>
-  );
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.files && event.target.files.length > 0) {
+      handleFilesSelected(event.target.files);
+      event.target.value = "";
+    }
+  }
+
+  return {
+    documents,
+    handleFilesSelected,
+    handleRemove,
+    fileInputRef,
+    openFilePicker,
+    handleInputChange,
+  };
 }

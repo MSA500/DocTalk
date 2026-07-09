@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Mic, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { VoicePhase } from "@/components/voice/VoiceAssistantDemo";
+import type { VoicePhase } from "@/lib/voice-phase";
 
 const ringVariants = {
   animate: {
