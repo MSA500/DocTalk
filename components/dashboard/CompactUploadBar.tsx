@@ -29,25 +29,23 @@ export function CompactUploadBar({ onFilesSelected, onBrowseClick, className }: 
         }
       }}
       className={cn(
-        "flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-4 transition-colors sm:flex-row sm:justify-between",
+        "flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-5 text-center transition-colors",
         isDragActive ? "border-brand bg-brand/5" : "border-border bg-surface",
         className,
       )}
     >
-      <div className="flex items-center gap-3 text-center sm:text-left">
-        <motion.div
-          animate={isDragActive ? { y: [-2, 2, -2] } : { y: 0 }}
-          transition={{ duration: 1.2, repeat: isDragActive ? Infinity : 0, ease: "easeInOut" }}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand"
-        >
-          <UploadCloud aria-hidden="true" className="h-4.5 w-4.5" />
-        </motion.div>
-        <div>
-          <p className="text-sm font-medium text-foreground">Upload documents</p>
-          <p className="text-xs text-muted-foreground">
-            Drag &amp; drop or browse &mdash; PDF, DOCX, or TXT, up to 15 MB
-          </p>
-        </div>
+      <motion.div
+        animate={isDragActive ? { y: [-2, 2, -2] } : { y: 0 }}
+        transition={{ duration: 1.2, repeat: isDragActive ? Infinity : 0, ease: "easeInOut" }}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand"
+      >
+        <UploadCloud aria-hidden="true" className="h-4.5 w-4.5" />
+      </motion.div>
+      <div>
+        <p className="text-sm font-medium text-foreground">Upload documents</p>
+        <p className="text-xs text-muted-foreground">
+          Drag &amp; drop or browse &mdash; PDF, DOCX, or TXT, up to 15 MB
+        </p>
       </div>
       <button
         type="button"
