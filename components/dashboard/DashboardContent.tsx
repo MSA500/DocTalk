@@ -30,6 +30,17 @@ export function DashboardContent() {
           <VoiceHeroPanel />
         </section>
 
+        {/* Mobile only (below sm:): upload appears here, above Recent
+            Conversations. The Document Library section below has its own
+            copy of this same card, visible from sm: up — only one is ever
+            rendered/reachable at a given viewport (the other is `hidden`,
+            not just visually collapsed), so this stays a single upload
+            entry point, just responsively repositioned. */}
+        <div className="sm:hidden">
+          <h2 className="sr-only">Upload documents</h2>
+          <CompactUploadBar onFilesSelected={handleFilesSelected} onBrowseClick={openFilePicker} />
+        </div>
+
         <section aria-labelledby="recent-conversations-heading" id="recent-conversations">
           <div>
             <h2 id="recent-conversations-heading" className="text-xl font-semibold text-foreground">
@@ -60,7 +71,9 @@ export function DashboardContent() {
             Document library
           </h2>
 
-          <CompactUploadBar onFilesSelected={handleFilesSelected} onBrowseClick={openFilePicker} />
+          <div className="hidden sm:block">
+            <CompactUploadBar onFilesSelected={handleFilesSelected} onBrowseClick={openFilePicker} />
+          </div>
 
           <div className="mt-4">
             <DocumentLibrary

@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import { PwaInstallProvider } from "@/components/pwa/PwaInstallProvider";
 import { AmbientBackground } from "@/components/ui/AmbientBackground";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { siteConfig } from "@/lib/site-config";
@@ -91,19 +92,21 @@ export default async function RootLayout({
         <JsonLd />
         <ThemeProvider initialTheme={theme}>
           <ToastProvider>
-            <AmbientBackground />
-            <a
-              href="#main-content"
-              className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-foreground"
-            >
-              Skip to main content
-            </a>
-            <Header />
-            <main id="main-content" className="flex-1">
-              {children}
-            </main>
-            <Footer />
-            <ServiceWorkerRegister />
+            <PwaInstallProvider>
+              <AmbientBackground />
+              <a
+                href="#main-content"
+                className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-foreground"
+              >
+                Skip to main content
+              </a>
+              <Header />
+              <main id="main-content" className="flex-1">
+                {children}
+              </main>
+              <Footer />
+              <ServiceWorkerRegister />
+            </PwaInstallProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

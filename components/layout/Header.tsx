@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { InstallAppButton } from "@/components/pwa/InstallAppButton";
 import { primaryNav } from "@/lib/site-config";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +75,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <InstallAppButton variant="compact" className="hidden sm:flex" />
           <ThemeToggle className="hidden sm:flex" />
           <Link
             href="/dashboard"
@@ -133,9 +135,14 @@ export function Header() {
                 );
               })}
             </ul>
-            <div className="flex items-center justify-between border-t border-border px-4 py-4 sm:px-6">
-              <span className="text-sm text-muted-foreground">Theme</span>
-              <ThemeToggle />
+            <div className="border-t border-border px-4 py-4 sm:px-6">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Theme</span>
+                <ThemeToggle />
+              </div>
+              <div className="mt-4">
+                <InstallAppButton />
+              </div>
             </div>
           </motion.nav>
         )}

@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getLLMProvider } from "@/lib/ai/llm";
 import { searchDocumentChunks } from "@/lib/rag/search";
-import { buildGroundedMessages, NO_DOCUMENTS_ANSWER } from "@/lib/rag/prompt";
+import { buildMessagesForClassification, classifyRetrieval, NO_DOCUMENTS_ANSWER } from "@/lib/rag/prompt";
 import { logConversationTurn } from "@/lib/rag/history";
 import { resolveCallToken } from "@/lib/rag/call-token";
 
@@ -151,18 +151,23 @@ export async function POST(request: Request) {
 
   try {
     const chunks = await searchDocumentChunks(supabase, sessionId, question);
-    const referencedDocumentIds = Array.from(new Set(chunks.map((chunk) => chunk.documentId)));
+    const classification = classifyRetrieval(chunks);
+    console.log(
+      `/api/vapi/chat/completions: classification=${classification} topSimilarity=${chunks[0]?.similarity ?? "n/a"}`,
+    );
+    const referencedDocumentIds =
+      classification === "none" ? [] : Array.from(new Set(chunks.map((chunk) => chunk.documentId)));
 
-    if (chunks.length === 0) {
+    const messages = buildMessagesForClassification(question, chunks, classification);
+    if (!messages) {
       void logTurnSafely(supabase, sessionId, question, NO_DOCUMENTS_ANSWER, referencedDocumentIds);
       return respondWithFixedMessage(model, NO_DOCUMENTS_ANSWER, wantsStream);
     }
 
-    const groundedMessages = buildGroundedMessages(question, chunks);
     const provider = getLLMProvider();
 
     if (!wantsStream) {
-      const answer = await provider.complete(groundedMessages);
+      const answer = await provider.complete(messages);
       // Logged here, before any further handling, specifically so a
       // garbled-in-speech report can be checked against the exact raw text
       // the LLM produced — if this log line already looks garbled, the
@@ -177,7 +182,7 @@ export async function POST(request: Request) {
       async start(controller) {
         let fullAnswer = "";
         try {
-          for await (const delta of provider.stream(groundedMessages)) {
+          for await (const delta of provider.stream(messages)) {
             fullAnswer += delta;
             controller.enqueue(sseChunk(provider.model, delta, null));
           }
