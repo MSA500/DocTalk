@@ -86,22 +86,35 @@ async function logTurnSafely(
 
 export async function POST(request: Request) {
   const url = new URL(request.url);
-  // The client sets this via assistantOverrides.model.headers (see
-  // lib/hooks/useVoiceCall.ts) — a query-string fallback is kept too in
-  // case a future dashboard-configured assistant needs a non-header path,
-  // but the header is the one path actually exercised end to end.
-  const callToken = request.headers.get("x-doctalk-call-token") || url.searchParams.get("callToken");
 
-  console.log(
-    `/api/vapi/chat/completions: headerToken=${request.headers.get("x-doctalk-call-token") ? "present" : "absent"} queryToken=${url.searchParams.get("callToken") ? "present" : "absent"} resolvedCallToken=${callToken ? "present" : "MISSING"}`,
-  );
-
-  let body: { model?: string; messages?: VapiChatMessage[]; stream?: boolean };
+  let body: {
+    model?: string;
+    messages?: VapiChatMessage[];
+    stream?: boolean;
+    metadata?: { callToken?: string };
+    callToken?: string;
+  };
   try {
     body = await request.json();
   } catch {
     body = {};
   }
+
+  // Three independent channels for the same call token, tried in order of
+  // how well-documented/reliable each is confirmed to be. The client (see
+  // lib/hooks/useVoiceCall.ts) currently sends both metadata and the
+  // header on every call; query string and top-level body.callToken are
+  // defensive fallbacks for assistant configs that might deliver it
+  // differently (e.g. metadataSendMode: "destructured").
+  const metadataToken = body.metadata?.callToken ?? null;
+  const headerToken = request.headers.get("x-doctalk-call-token");
+  const bodyToken = body.callToken ?? null;
+  const queryToken = url.searchParams.get("callToken");
+  const callToken = metadataToken || headerToken || bodyToken || queryToken;
+
+  console.log(
+    `/api/vapi/chat/completions: metadataToken=${metadataToken ? "present" : "absent"} headerToken=${headerToken ? "present" : "absent"} bodyToken=${bodyToken ? "present" : "absent"} queryToken=${queryToken ? "present" : "absent"} resolvedCallToken=${callToken ? "present" : "MISSING"}`,
+  );
 
   const model = body.model || "doctalk-rag";
   const wantsStream = body.stream !== false;

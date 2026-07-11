@@ -152,10 +152,19 @@ export function useVoiceCall(onClose: () => void) {
         // local-tunnel/staging/production without editing the Vapi
         // dashboard each time. The call token (not the real session
         // cookie, which is httpOnly and never reaches client JS) is passed
-        // via a custom header — see supabase/migrations/
+        // via TWO redundant channels — see supabase/migrations/
         // 0003_rag_and_conversation_history.sql and
-        // app/api/voice/prepare-call for why.
+        // app/api/voice/prepare-call for why a token at all:
+        //  - assistantOverrides.metadata, which Vapi's own custom-LLM docs
+        //    confirm is forwarded as a `metadata` field directly in the
+        //    request body (CustomLLMModel's default metadataSendMode is
+        //    "variable") — the better-documented, body-based path.
+        //  - a custom header, kept as a second path in case metadata
+        //    forwarding and header forwarding behave differently in
+        //    practice than either is individually documented to.
+        // The server checks both (see app/api/vapi/chat/completions).
         await vapi.start(status.vapiAssistantId as string, {
+          metadata: { callToken: prepareBody.callToken as string },
           model: {
             provider: "custom-llm",
             model: "doctalk-rag",
