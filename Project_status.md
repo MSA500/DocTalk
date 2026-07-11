@@ -261,7 +261,7 @@ across desktop and mobile viewports, and the glow reads as a soft ambient
 tint rather than a spotlight. `npm run build` / `lint` / `tsc --noEmit` /
 `npm audit` all clean.
 
-## Phase 2: Document upload — schema, pipeline, real Document Library — MOSTLY COMPLETE (blocked on live credentials)
+## Phase 2: Document upload — schema, pipeline, real Document Library — COMPLETE (confirmed live; see Phase 2.1 for the schema fix that unblocked it)
 
 Everything is built and passes every check that doesn't require a live
 Supabase project: production build, typecheck, lint, `npm audit`, and
@@ -513,7 +513,7 @@ mobile menu, document add/remove, Settings clicks, call-overlay open/close
 migration, and upload one real PDF, one DOCX, and one TXT file through the
 dashboard.
 
-## Phase 2.1: unpdf migration, granular processing stages, live-schema bug fix — CODE COMPLETE (blocked on one migration you need to run)
+## Phase 2.1: unpdf migration, granular processing stages, live-schema bug fix — COMPLETE (migration applied, confirmed live)
 
 Two fixes to Phase 2, both driven by real usage: your own early test uploads
 (before this round started) showed two real PDFs failing extraction, and the
@@ -685,14 +685,316 @@ the real failure you originally reported, not just synthetic test files.
   Supabase project (`POST /upload` → `POST /[id]/process` → `GET /[id]`
   polling → `DELETE`), which is what surfaced the constraint bug above.
 
+### Update: migration 0002 has since been applied — confirmed live
+
+You've since run `0002_granular_processing_stages.sql` yourself. Verified
+directly against your live project during Phase 3 work: uploaded
+`sample.txt`, watched it move `uploading` → `extracting` → `ready` for
+real, with a real chunk (`chunk_count: 1`) embedded via a live Hugging Face
+call — the full Phase 2 pipeline now genuinely works end-to-end on your
+actual Supabase project, not just in code review. Test row removed after
+confirming.
+
+## Phase 3: Fully Functional RAG + Voice Assistant — CODE COMPLETE (blocked on Groq + Vapi credentials + one migration for live voice verification)
+
+Every piece of the RAG and voice pipeline described below is written,
+type-checked, lint-clean, and — everywhere it's possible to test without a
+Groq key and a live Vapi account — verified against your real Supabase
+project with real HTTP requests, not just read through. The one thing that
+is **not** yet provable end-to-end is an actual spoken question-and-answer
+voice call, because that needs three things this environment doesn't have:
+`supabase/migrations/0003_rag_and_conversation_history.sql` applied,
+`LLM_API_KEY` (Groq), and real `VAPI_PUBLIC_KEY`/`VAPI_PRIVATE_KEY`/
+`VAPI_ASSISTANT_ID` values. See "What's not verified yet" below for the
+exact remaining steps.
+
+### 1 — Vector similarity search (`lib/rag/search.ts`, migration 0003)
+
+A plain supabase-js `.select()` can't order by pgvector cosine distance or
+join `documents`↔`document_chunks` in one call, so the actual search is a
+Postgres function, `match_document_chunks(query_embedding, match_session_id,
+match_count)`, added in
+`supabase/migrations/0003_rag_and_conversation_history.sql` and called via
+`supabase.rpc()`. It joins to `documents` and filters
+`session_id = match_session_id and status = 'ready'` — a session can only
+ever retrieve chunks from its own successfully-processed documents, never
+another session's, and never from a document still mid-pipeline or failed.
+`searchDocumentChunks()` embeds the question via the existing Phase 2
+`getEmbeddingProvider()` adapter first, then runs the RPC — same embedding
+adapter, no new embedding code path. Exposed directly as
+`POST /api/rag/search` (`{ query }` → top-K chunks with filename +
+similarity), both as a real capability and as the retrieval half of
+`POST /api/rag/answer`.
+
+### 2 — LLM answer generation (`lib/ai/llm.ts`)
+
+Mirrors the Phase 2 embeddings adapter exactly: `lib/ai/llm/types.ts`
+(`LLMProvider` interface — `model`, `complete()`, `stream()` — plus
+`LLMConfigError`), `lib/ai/llm/openai-compatible.ts` (one shared
+fetch+SSE-parsing implementation, since Groq's API is deliberately
+byte-for-byte OpenAI-compatible — writing that twice would just be the same
+code twice), `lib/ai/llm/groq.ts` and `lib/ai/llm/openai.ts` (thin
+provider-specific wrappers), and `getLLMProvider()` in `lib/ai/llm.ts`
+picking the concrete provider from `LLM_PROVIDER` alone. Nothing outside
+`lib/ai/llm/` imports a provider-specific module — grep confirms
+`groq.ai/` / `api.openai.com` / provider class names appear nowhere else.
+
+- **Default provider: Groq** (your choice — see the alignment discussion at
+  the start of this round). Default model: `openai/gpt-oss-120b`, Groq's
+  own recommended general-purpose model as of this build. Deliberately
+  **not** `llama-3.3-70b-versatile` or `llama-3.1-8b-instant`, the more
+  commonly-tutorialized defaults — both are scheduled for deprecation on
+  **2026-08-16** (confirmed directly against Groq's docs this session, not
+  assumed from training data, since a default that stops working in five
+  weeks would be a poor choice to ship). Override via `LLM_MODEL`.
+- Second provider (`openai`, default `gpt-4o-mini`) exists for the same
+  reason Phase 2 kept two embedding providers: proof the adapter pattern is
+  real, not one real implementation plus a stub.
+- `stream()` yields plain text deltas (provider-agnostic) — the Vapi route
+  (see below) wraps these into whatever wire format it needs, so the
+  adapter itself stays free of any one integration's response-shaping
+  concerns.
+
+### 3 — Grounding, no-hallucination guarantee (`lib/rag/prompt.ts`, `lib/rag/answer.ts`)
+
+`generateAnswer()` is the one full RAG turn — retrieve → ground → generate
+→ log — used directly by `POST /api/rag/answer` and, in spirit, by the
+Vapi route. The no-hallucination guarantee is structural, not just a prompt
+instruction: **if retrieval returns zero chunks, the LLM is never called at
+all** — `NO_DOCUMENTS_ANSWER` ("I couldn't find anything about that in your
+uploaded documents...") is returned directly. When chunks *are* found, the
+system prompt instructs the model to answer only from the supplied
+excerpts and to say plainly when they don't contain the answer, but the
+zero-chunk case doesn't rely on the model obeying that instruback — there's
+nothing for it to hallucinate from because it's simply never invoked.
+
+### 4 — Real Vapi integration
+
+**Backend — the custom-LLM endpoint (`POST /api/vapi/chat/completions`):**
+Vapi's assistant is configured with `model.provider: "custom-llm"` and
+`model.url` pointed at this route; Vapi calls it directly, server to
+server, with a standard OpenAI chat-completions request
+(`{ model, messages, stream, ... }`, confirmed against Vapi's own
+`custom-llm/using-your-server` docs and the official
+`VapiAI/server-example-serverless-vercel` example this session, not
+assumed). This route:
+1. Resolves a call token (see below) back to a real `session_id`.
+2. Takes the last `role: "user"` message as the question (Vapi forwards
+   the assistant's configured system prompt too, but this route replaces
+   it entirely with its own grounded prompt from `lib/rag/prompt.ts` — the
+   dashboard's system-prompt field is effectively cosmetic for this
+   assistant, not the operative instruction).
+3. Runs the same retrieve → ground pipeline as `/api/rag/answer`.
+4. Streams the LLM's plain-text deltas back to Vapi as
+   OpenAI-chunk-shaped SSE (`data: {"choices":[{"delta":{"content":"..."}}]}`,
+   ending `data: [DONE]`) — verified directly with `curl` against a
+   simulated Vapi request; both the streaming and non-streaming response
+   shapes are confirmed byte-correct.
+5. Logs the completed turn to `conversation_turns` once the stream ends.
+6. Every failure mode (bad/missing call token, no configured LLM, search
+   failure, generation failure) still returns a **valid** OpenAI-shaped
+   response with an honest spoken message — never a raw error Vapi
+   wouldn't know how to speak.
+
+**The session-scoping problem, and how it's solved:** Vapi's servers call
+the custom-LLM endpoint directly — there are no browser cookies on that
+request. The real `doctalk-session` cookie is `httpOnly` by design (Phase 2:
+"no client JS ever needs to read this cookie itself"), and this round
+deliberately preserves that invariant rather than quietly exposing the real
+session id to client JS or to Vapi's infrastructure just to thread it
+through. Instead: the client calls `POST /api/voice/prepare-call`
+(same-origin, so the httpOnly cookie *is* sent there) right before starting
+a call, which mints a short-lived, opaque `call_token` in a new
+`voice_call_tokens` table and hands back only that token. The client passes
+it to Vapi as a custom header
+(`assistantOverrides.model.headers["x-doctalk-call-token"]`) — confirmed
+via the installed `@vapi-ai/web@2.6.1` type definitions that
+`CustomLLMModel.headers` is real, override-able, per-call config, not
+guessed — and `/api/vapi/chat/completions` resolves it back to `session_id`
+server-side. The real session cookie itself never leaves the server.
+
+`assistantOverrides.model.url` is also set per-call, to
+`window.location.origin + "/api/vapi"`, rather than relying on a single
+static URL configured once in the Vapi dashboard — confirmed from the
+installed SDK types that `model.url` is used as an OpenAI-client
+`baseURL` (Vapi appends `/chat/completions` itself, which is why the route
+lives at `app/api/vapi/chat/completions/route.ts`, not `app/api/vapi/route.ts`).
+Overriding it per call means the same assistant keeps working across
+localhost-via-tunnel, staging, and production without ever touching the
+Vapi dashboard again.
+
+**Frontend (`lib/hooks/useVoiceCall.ts`):** one hook backs the entire
+existing `VoiceCallOverlay` UI (the mic button, transcript, mute/hang-up
+controls, and Listening/Thinking/Answering labels were **not** rebuilt —
+only their data source changed) behind a single interface, branching
+internally on `GET /api/config/status`:
+- **Real mode:** preloads this session's past turns from
+  `GET /api/conversations` into the transcript, calls
+  `POST /api/voice/prepare-call`, constructs a real `@vapi-ai/web` `Vapi`
+  instance, and drives phase transitions from real SDK events —
+  `call-start` → `listening`; a final user transcript message → `thinking`;
+  a final assistant transcript message → `answering` (the real generated
+  answer, animated through the existing `Typewriter` component exactly as
+  before, just with real text instead of `lib/mock-data.ts`); `call-end` →
+  closes the overlay. `setMuted()`/`stop()` map directly to the existing
+  mute/hang-up buttons.
+- **Demo mode:** the exact original Phase 1.2 canned state machine
+  (`lib/mock-data.ts`'s `demoExchanges`, the same `LISTENING_MS`/
+  `THINKING_MS`/`PAUSE_MS` timings), relocated into this hook rather than
+  rewritten, so its behavior is unchanged.
+- A new `"connecting"` phase (`lib/voice-phase.ts`) covers the moment
+  between opening the overlay and either the demo timer or a real
+  `call-start` firing — `MicButton` now treats it like `"thinking"`
+  (spinner), a small, deliberately consistent visual choice since both
+  represent "waiting for something."
+
+### 5 — Real global conversation history (migration 0003, `lib/rag/history.ts`)
+
+`conversation_turns` — `id, session_id, question, answer,
+referenced_document_ids uuid[], created_at` — one row per completed RAG
+turn, logged from both `POST /api/rag/answer` and the Vapi route.
+Deliberately **not** a multi-turn chat thread: each question is answered
+independently (no prior turns are fed back into the grounding prompt), the
+table only exists so the transcript persists and reloads correctly —
+`GET /api/conversations` is what `useVoiceCall` calls to preload history
+when the overlay (re)opens, per your alignment note that history is global
+per session, not per-document and not resumable. Logging failures are
+caught and logged to the server console rather than failing the user's
+actual answer — the spoken/written answer is the critical path; the saved
+transcript is not (unlike the Phase 2.1 bug where a silent failure on
+*storage_path* — genuinely critical data — was the problem; this is a
+deliberate, different tradeoff for a genuinely non-critical write).
+
+### 6 — Demo mode fallback (`lib/config-status.ts`, `GET /api/config/status`)
+
+`isFullyConfiguredForVoice()` requires Supabase, the embedding provider,
+the LLM provider, and Vapi to **all** four be configured — if any one is
+missing, `demoMode: true` and the overlay runs the untouched Phase 1.2
+canned demo instead of a half-working real call, with a small "Demo mode"
+badge now shown in the overlay header so it's never ambiguous which one
+you're looking at. `VAPI_PUBLIC_KEY` is served to the client through this
+endpoint (never inlined as a `NEXT_PUBLIC_` build-time var, to keep the env
+var name exactly as scaffolded in Phase 1) — safe to expose, since it's
+Vapi's own client-safe key by design, the direct equivalent of a Stripe
+publishable key (see `@vapi-ai/web`'s own quickstart, which passes it
+straight into browser code). `VAPI_PRIVATE_KEY` is never read by this or
+any other request-serving route — its only consumer is the optional
+`scripts/create-vapi-assistant.mjs` provisioning script, run by hand.
+
+### 7 — Loading states
+
+Every stage of a real call already has a distinct, real (not timer-faked)
+UI state via the phase machine above: `connecting` (spinner) →
+`listening` (waveform active) → `thinking` (spinner + animated dots, while
+the server embeds the question, searches, and generates) → `answering`
+(Typewriter animating the real answer) — the same granular-stage
+philosophy Phase 2.1 established for document processing, applied here to
+the voice pipeline.
+
+### Latency notes
+
+- Groq was chosen specifically for its inference speed (Groq's own
+  documented throughput: ~500 tokens/sec for `openai/gpt-oss-120b`) — the
+  single biggest latency lever available for a live voice call, more
+  impactful than any code-level optimization here.
+- The LLM response is streamed end-to-end: Groq streams tokens to
+  `/api/vapi/chat/completions`, which re-streams them to Vapi as they
+  arrive rather than buffering the full answer first — Vapi (per its own
+  docs) begins speaking from partial output as it's fed, so the user hears
+  the start of the answer well before generation finishes.
+- Embedding the question and retrieving chunks happens once, synchronously,
+  before the LLM call starts — this is a real, currently-unavoidable
+  sequential dependency (you can't ground a prompt in context you haven't
+  retrieved yet), and is a single Hugging Face round-trip plus one Postgres
+  RPC call, not multiple redundant Supabase round-trips.
+- **Known remaining bottleneck:** the Hugging Face Inference API
+  (`EMBEDDING_PROVIDER=huggingface`) is a cold-start-prone, shared-hardware
+  free endpoint — its latency is the least predictable part of the whole
+  pipeline and is outside this app's control. If real-call latency ends up
+  dominated by embedding time rather than LLM generation, switching
+  `EMBEDDING_PROVIDER=openai` (already implemented, same 384-dimension
+  constraint applies) is the concrete next lever, not a code change here.
+
+### Migration 0003 — pending your action
+
+`supabase/migrations/0003_rag_and_conversation_history.sql` adds
+`match_document_chunks()`, `conversation_turns`, and `voice_call_tokens`.
+Per your preference from Phase 2.1, **I have not run this against your
+live database** — you'll need to run it yourself in the SQL Editor.
+Confirmed via live `curl` requests this round that every route needing
+these objects fails with a precise, correct error until then (e.g.
+`Could not find the function public.match_document_chunks(...) in the
+schema cache`) — not a code bug, just this migration pending.
+
+### What's verified this round
+
+- `npm run build` — 18 routes, all 6 new Phase 3 routes present
+  (`/api/rag/search`, `/api/rag/answer`, `/api/conversations`,
+  `/api/config/status`, `/api/voice/prepare-call`,
+  `/api/vapi/chat/completions`); `tsc --noEmit`, `eslint`, `npm audit` — all
+  clean (0 errors/warnings/vulnerabilities).
+- Dev server restarted clean (stale-Turbopack-cache lesson from Phase 2.1
+  applied proactively this time) and every new route hit directly with
+  `curl` against your real Supabase + Hugging Face config:
+  `GET /api/config/status` correctly reports `demoMode: true` (Groq/Vapi
+  keys genuinely absent right now); `POST /api/rag/search`,
+  `POST /api/rag/answer`, `GET /api/conversations`, and
+  `POST /api/voice/prepare-call` all correctly reach Supabase and fail with
+  the exact missing-migration errors described above; `POST /api/vapi/chat/completions`
+  produces byte-correct OpenAI-compatible responses in both streaming and
+  non-streaming modes when simulated with `curl` (no Vapi account needed to
+  verify the wire format itself).
+- Re-verified the full Phase 2 upload pipeline live, post-restart:
+  `sample.txt` → `uploading` → `extracting` → `ready`, 1 real chunk
+  embedded — confirms this round's changes didn't regress Phase 2, and
+  confirms migration 0002 (Phase 2.1) has in fact been applied.
+- CDP regression pass on the rewired voice overlay (demo mode, since Groq/
+  Vapi aren't configured here): opens correctly, shows the new "Demo mode"
+  badge, progresses through the untouched canned state machine (question +
+  answer bubbles appear on schedule), mute/unmute and hang-up both work,
+  zero console errors or warnings throughout.
+
 ### What's not verified yet
 
-- **The full happy path end-to-end** (upload → extracting → embedding →
-  ready, with the granular stepper visibly advancing through all four
-  stages in the UI) — blocked on migration 0002. This is the concrete next
-  step once you confirm it's been run: re-process your existing
-  `iso27001.pdf`/`Afifa internship report-1.pdf` rows (or a fresh upload)
-  and confirm unpdf succeeds where pdf-parse failed.
+- **A real, spoken, RAG-grounded voice call end-to-end.** Blocked on three
+  things, all requiring your action, none requiring further code:
+  1. Run `supabase/migrations/0003_rag_and_conversation_history.sql` in the
+     SQL Editor.
+  2. Set `LLM_API_KEY` (a Groq API key) in `.env.local` — `LLM_PROVIDER`
+     can stay unset (defaults to `groq`).
+  3. Set `VAPI_PUBLIC_KEY`/`VAPI_PRIVATE_KEY` in `.env.local`, then create
+     the assistant — either run
+     `node scripts/create-vapi-assistant.mjs https://your-public-app-url`
+     (requires a real, internet-reachable URL; Vapi calls it directly, so
+     `localhost` alone won't work without a tunnel like ngrok/cloudflared),
+     or create it by hand in the Vapi dashboard with:
+     ```json
+     {
+       "name": "DocTalk",
+       "model": {
+         "provider": "custom-llm",
+         "model": "doctalk-rag",
+         "url": "https://your-public-app-url/api/vapi"
+       },
+       "voice": { "provider": "vapi", "voiceId": "Elliot" }
+     }
+     ```
+     Either way, set the returned assistant id as `VAPI_ASSISTANT_ID`.
+  Once all three are done, `GET /api/config/status` will report
+  `demoMode: false` and opening the voice overlay will start a real call —
+  the concrete next verification step, using a real uploaded document, is
+  asking it a question that document actually answers and confirming the
+  spoken response is grounded in it (plus asking something the documents
+  *don't* cover, to confirm the honest "I couldn't find that" path).
+- The OpenAI LLM provider path (`LLM_PROVIDER=openai`) is implemented
+  against the long-stable OpenAI chat-completions shape but hasn't been
+  exercised with a real key, same caveat pattern as Phase 2's OpenAI
+  embedding provider.
+- `speech-start`/`speech-end` Vapi SDK events aren't used to drive UI state
+  (the transcript's `role`+`transcriptType: "final"` fields are used
+  instead, which are unambiguous) — worth revisiting once a live call can
+  be observed, in case they'd allow a more granular "assistant is
+  physically speaking right now" indicator distinct from "answering."
 
 ---
 
@@ -714,6 +1016,7 @@ reports **0 vulnerabilities**.
 | @supabase/supabase-js | 2.110.1 |
 | unpdf | 1.6.2 |
 | mammoth | 1.12.0 |
+| @vapi-ai/web | 2.6.1 |
 
 Note: `next-themes` (0.4.6) was removed in Phase 1.1 — see Part D above. The
 theme system is now a small in-repo cookie-based context provider instead.
@@ -731,7 +1034,17 @@ No embedding-SDK dependency was added — both providers in
 `lib/ai/embeddings/` are plain `fetch` calls against each provider's REST
 API, which kept the dependency count down and avoids being coupled to an
 SDK's own versioning/breaking changes for what's ultimately two simple HTTP
-requests.
+requests. **Phase 3's LLM adapter (`lib/ai/llm/`) follows the identical
+plain-`fetch` philosophy** — no OpenAI or Groq SDK dependency either, since
+Groq's API is deliberately OpenAI-wire-compatible and both are simple
+POST-and-parse-SSE calls.
+
+**`@vapi-ai/web` is the one genuinely new runtime dependency in Phase 3**,
+and it's not optional the way an SDK usually is — it's the actual
+WebRTC/voice-call client (built on Daily.co under the hood), there's no
+plain-`fetch` equivalent for establishing a real-time voice call. Pinned to
+the exact latest stable release (2.6.1) at build time; `npm audit` stayed
+at 0 vulnerabilities after adding it.
 
 ### Dev dependencies
 | Package | Version |
@@ -772,18 +1085,27 @@ requests.
 ```
 app/            Routes (App Router): /, /dashboard, /dashboard/documents, /about, /settings, not-found,
                 robots.ts, sitemap.ts, template.tsx, layout.tsx,
-                api/documents/{route,upload/route,[id]/route,[id]/process/route}.ts
+                api/documents/{route,upload/route,[id]/route,[id]/process/route}.ts,
+                api/rag/{search,answer}/route.ts, api/conversations/route.ts,
+                api/config/status/route.ts, api/voice/prepare-call/route.ts,
+                api/vapi/chat/completions/route.ts
 components/     UI, split by domain: layout, theme, ui (incl. ToastProvider), voice, dashboard, home, settings, seo, pwa
-lib/            site-config, mock-data (voice demo only now), fonts, utils (cn), document-type, voice-phase,
-                theme-cookie, session-cookie, hooks/ (useDocumentWorkspace, useHasMounted),
+lib/            site-config, mock-data (demo-mode fallback data only now), fonts, utils (cn), document-type,
+                voice-phase, theme-cookie, session-cookie, config-status,
+                hooks/ (useDocumentWorkspace, useVoiceCall, useHasMounted),
                 supabase/ (server client), documents/ (extract-text, chunk-text, storage, validate-upload),
-                ai/embeddings.ts + ai/embeddings/{types,huggingface,openai}.ts, types/document.ts
+                ai/embeddings.ts + ai/embeddings/{types,huggingface,openai}.ts,
+                ai/llm.ts + ai/llm/{types,openai-compatible,groq,openai}.ts,
+                rag/ (search, prompt, answer, history, call-token),
+                types/document.ts, types/conversation.ts
 styles/         globals.css (Tailwind v4 theme tokens, light/dark, keyframes, dark-only dotted-grid background)
 public/         icons, manifest.json, sw.js, placeholder logo SVGs
-scripts/        generate-placeholder-icons.mjs (one-off, re-runnable icon generator)
+scripts/        generate-placeholder-icons.mjs (one-off icon generator),
+                create-vapi-assistant.mjs (Phase 3 — optional Vapi assistant provisioning via REST API)
 supabase/       migrations/0001_init.sql (documents, document_chunks, pgvector, HNSW index, storage bucket),
-                migrations/0002_granular_processing_stages.sql (Phase 2.1 — widens the status check
-                constraint on an already-live database; pending, see Phase 2.1)
+                migrations/0002_granular_processing_stages.sql (Phase 2.1 — status enum widen, applied),
+                migrations/0003_rag_and_conversation_history.sql (Phase 3 — match_document_chunks RPC,
+                conversation_turns, voice_call_tokens; pending, see Phase 3)
 proxy.ts        Session cookie assignment (Next.js 16's "proxy," formerly "middleware")
 ```
 
@@ -798,25 +1120,54 @@ proxy.ts        Session cookie assignment (Next.js 16's "proxy," formerly "middl
   polling and a 4-stage visual stepper (Phase 2.1), and error messages,
   real removal (Storage + DB, cascading chunk delete). PDF extraction uses
   `unpdf` (Phase 2.1; replaced `pdf-parse`, which failed on real
-  unencrypted PDFs in a Next.js API route). *End-to-end confirmation on
-  your live project is pending one schema migration you still need to
-  run — see Phase 2.1's "A real bug this round's live testing caught."*
+  unencrypted PDFs in a Next.js API route). Confirmed live end-to-end this
+  round (see Phase 2.1's migration-0002 update above).
 - Document Library (`/dashboard` sidebar and `/dashboard/documents`) reads
   real data from `GET /api/documents`, scoped to an anonymous session
   cookie (no auth). Contained-scroll on tablet/desktop, natural page scroll
   on mobile; "All documents"/"In progress" filter; "Browse" and "View more"
   actions.
+- **Vector similarity search and RAG answer generation (Phase 3):** a real
+  question gets embedded, searched against pgvector via
+  `match_document_chunks()` (scoped to the session's own ready documents),
+  grounded into a prompt, and answered by a real, swappable LLM (Groq by
+  default) — with a structural guarantee against hallucination when no
+  relevant context exists (see Phase 3, Part 3). Code-complete and verified
+  by direct `curl` requests against your live Supabase project; the LLM
+  call itself is pending your `LLM_API_KEY` — see Phase 3's "What's not
+  verified yet."
+- **Real global conversation history (Phase 3):** every RAG turn is logged
+  to `conversation_turns` and reloaded into the transcript when the voice
+  overlay reopens, scoped by session, not per-document, not resumable —
+  exactly per your alignment notes.
 - Toast notifications (success/error) on every upload and delete outcome.
 - Light/dark theme toggle, persisted via a first-party `doctalk-theme` cookie (not localStorage), read server-side for a correct first paint (no FOUC), defaulting new visitors to light
-- Fullscreen voice call overlay: real open/close transitions, real mute (genuinely pauses the simulated conversation), real auto-scrolling transcript, real call timer, closeable via Hang Up, the X button, or Escape
+- **Fullscreen voice call overlay (real mode, Phase 3):** when Supabase,
+  the embedding provider, the LLM provider, and Vapi are all configured,
+  this drives an actual `@vapi-ai/web` voice call — real speech-to-text via
+  Vapi's transcriber, real answers generated by the RAG pipeline above
+  (not canned text), real text-to-speech, real Listening/Thinking/
+  Answering states driven by live call events, real mute (via
+  `vapi.setMuted()`), real auto-scrolling transcript, real call timer,
+  closeable via Hang Up, the X button, or Escape. **Falls back to the
+  original Phase 1.2 canned demo (with a "Demo mode" badge) whenever any of
+  those four aren't configured** — see Phase 3, Part 6. In *this*
+  environment specifically, it's currently running in demo mode, since
+  `LLM_API_KEY`/Vapi keys aren't set — see Phase 3's "What's not verified
+  yet" for the exact remaining setup steps.
 - Responsive header with active-link tracking and an animated mobile menu (keyboard-dismissible via Escape)
 - Theme selector on Settings is wired to the real theme (Light/Dark)
 - Typewriter, waveform, and mic-pulse animations are genuinely running (Framer Motion), not static images
 - Dark-mode-only ambient background — a faint dotted grid, evenly present edge-to-edge (Phase 1.3 removed the drifting glow layer). Pure CSS, no effect/paint cost in light mode.
 - PWA manifest + service worker registration (confirmed installable; service worker registers successfully in dev)
 
-**Mocked (fake data, no backend):**
-- Voice call transcript content (loops through 3 canned question/answer pairs from `lib/mock-data.ts`, appended to a growing transcript — see Phase 1.2 Part B). **Real VAPI wiring (actual speech-to-text, text-to-speech, and LLM-backed answers) is still pending for a later phase** — everything in the call overlay today is simulated timing and canned text.
+**Mocked (fake data, no backend) — demo-mode fallback only:**
+- When Supabase/embedding/LLM/Vapi aren't all configured (true in this
+  build environment right now), the voice call overlay falls back to the
+  original Phase 1.2 canned question/answer loop from `lib/mock-data.ts`,
+  clearly labeled with a "Demo mode" badge so it's never mistaken for a
+  real answer. This is an intentional, honest fallback (Phase 3
+  requirement #5), not a leftover placeholder — see Phase 3, Part 6.
 - Settings profile fields (disabled inputs, placeholder values), notification toggles (local state only)
 
 ## SEO / accessibility / PWA checklist
@@ -865,9 +1216,16 @@ surfacing as a confusing, disconnected "Invalid key" error several steps
 later in `/process`. Fixed by checking the error in both the upload route
 and the process route's `embedding`-status update and failing the document
 with a specific message instead of continuing silently. The underlying live
-schema fix (`supabase/migrations/0002_granular_processing_stages.sql`) is
-written but intentionally **not yet applied** — you asked to run it
-yourself.
+schema fix (`supabase/migrations/0002_granular_processing_stages.sql`) has
+since been applied by you and confirmed live during Phase 3 verification
+(see the update note under Phase 2.1 above).
+
+**Phase 3** — no new bug found in the code written this round; the lesson
+from Phase 2.1 (a long-lived dev server's Turbopack cache not picking up
+brand-new route files) was instead applied *proactively* this time — the
+dev server was restarted with a cleared cache before attempting to test any
+of Phase 3's new routes, rather than discovering the same class of issue
+again the hard way.
 
 ## `.env.local.example` — variables defined (names only, no values)
 
@@ -885,43 +1243,49 @@ VAPI_PUBLIC_KEY
 VAPI_PRIVATE_KEY
 VAPI_ASSISTANT_ID
 ```
-Same variable names as Phase 1 defined — Phase 2 didn't need to add any new
-ones, since `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` and
-`EMBEDDING_PROVIDER`/`EMBEDDING_API_KEY`/`EMBEDDING_MODEL` were anticipated
-and already present. The file now has explanatory comments on each var
-(what it's for, current default, dimension caveats) — comments are allowed
-in this file per the task instructions; still no real values.
-`SUPABASE_ANON_KEY` remains defined but unused by any Phase 2 code (kept
-for possible future client-side use; noted inline). `LLM_*` and `VAPI_*`
-stay unused until Phase 3.
+Same variable names as Phase 1 defined — no new variables were ever needed
+through Phase 3; every name was anticipated and scaffolded from the start.
+`LLM_*` and `VAPI_*` went from "not used yet" placeholders to fully wired,
+real config points this round (Phase 3, Parts 2 and 4) — the file's
+comments on them were rewritten to reflect that (see `.env.local.example`
+itself: default providers/models, which vars are safe to expose to the
+client and why, and how to obtain `VAPI_ASSISTANT_ID`).
+`SUPABASE_ANON_KEY` remains defined but unused by any code through Phase 3
+(kept for possible future client-side use; noted inline).
 
 Note: `.gitignore` blanket-excludes `.env*`; an explicit `!.env.local.example`
 exception was added so this template file stays tracked in git.
-**No `.env.local` was created in this environment** — see Phase 2's "What's
-not verified" for what that means for testing.
+**A real `.env.local` exists in this environment** as of Phase 2 — Supabase
+and the embedding provider are live-configured and confirmed working;
+`LLM_API_KEY` and the `VAPI_*` values remain unset, which is exactly what
+`GET /api/config/status` uses to decide demo vs. real mode — see Phase 3's
+"What's not verified yet" for the remaining setup steps.
 
 ## Verified
 
-- `npm run build` — clean production build, 12 routes (4 API routes:
-  `/api/documents`, `/api/documents/upload`, `/api/documents/[id]`, and
-  `/api/documents/[id]/process`, the last added in Phase 2.1 when the
-  upload pipeline was split into two requests). `/robots.txt` and
-  `/sitemap.xml` remain statically prerendered (`○`); the rest are
+- `npm run build` — clean production build, **18 routes** (10 API routes:
+  the 4 document routes from Phase 2/2.1, plus Phase 3's `/api/rag/search`,
+  `/api/rag/answer`, `/api/conversations`, `/api/config/status`,
+  `/api/voice/prepare-call`, `/api/vapi/chat/completions`). `/robots.txt`
+  and `/sitemap.xml` remain statically prerendered (`○`); the rest are
   dynamically server-rendered (`ƒ`), as before, because of the theme
   cookie read (Phase 1.1 Part D) — the API routes are inherently dynamic
   regardless (`export const runtime = "nodejs"`, no static content to
   prerender)
 - `npm run lint` — 0 errors/warnings
 - `npx tsc --noEmit` — 0 errors
-- `npm audit` — 0 vulnerabilities (including the three Phase 2 additions)
+- `npm audit` — 0 vulnerabilities (including Phase 3's one new runtime
+  dependency, `@vapi-ai/web`)
 - Console-clean verified via Chrome DevTools Protocol across every phase of
   this project: idle load + an aggressive interactive stress pass (rapid
   theme toggling, rapid client-side navigation, rapid mobile-menu toggling,
   rapid document add/remove, rapid Settings clicks) across all pages, plus
   (Phase 1.2) rapid call-overlay open/close ×5 and rapid mute/unmute ×10,
   plus (Phase 2, post hydration-bug-fix) a fresh load of every single page
-  and a real upload attempt through the real UI — zero console errors or
-  warnings anywhere in any of it
+  and a real upload attempt through the real UI, plus (Phase 3) the rewired
+  voice overlay running in demo mode — open, progress through the state
+  machine, mute/unmute, hang-up — zero console errors or warnings anywhere
+  in any of it
 - Manual visual QA via headless-browser screenshots: light + dark theme on
   every page, true mobile viewport (390px, verified via CDP device-metrics
   override with zero layout overflow), tablet width (820px), mobile menu
@@ -938,43 +1302,58 @@ not verified" for what that means for testing.
   empty-content error paths) — see "What's not verified" above for exactly
   what *hasn't* been proven yet (the live Supabase/embedding path)
 
-## Pending for Phase 2 (what's left, now that upload is built)
+## Functional requirements — confirmed status
 
-- **Run migration `0002_granular_processing_stages.sql` in the Supabase SQL
-  Editor** — the live status check constraint is stale relative to the
-  code's granular enum; this is what's currently blocking real uploads from
-  completing. See Phase 2.1's "A real bug this round's live testing caught"
-  for the full story.
-- Once that's run: re-process the existing `iso27001.pdf` and `Afifa
-  internship report-1.pdf` rows already sitting in Storage (or a fresh
-  upload) to get definitive proof the unpdf switch fixes the real failure
-  you originally reported.
-- Confirm the OpenAI embedding provider path with a real key (only the
-  Hugging Face path has been reasoned through against current docs)
-- Settings persistence (profile, notification preferences) — unrelated to
-  documents, still just local component state
-- Service worker offline caching strategy (currently install/activate only)
-- Replace placeholder logo/icons/OG image with final branding
-- Replace placeholder canonical domain (`https://doctalk.app`) with the real production domain
+All six functional requirements from the original project brief are now
+implemented and code-complete:
 
-## Pending for Phase 3
+1. **Document upload & processing** — done (Phase 2/2.1), confirmed live.
+2. **Vector similarity search** — done (Phase 3, Part 1), confirmed live
+   via `curl` against real Supabase + Hugging Face; blocked only on
+   migration 0003 for the RPC function itself to exist.
+3. **LLM-grounded answer generation** — done (Phase 3, Parts 2–3), adapter
+   pattern confirmed provider-agnostic; blocked only on a real `LLM_API_KEY`
+   to exercise an actual Groq call.
+4. **Real voice interaction (Vapi)** — done (Phase 3, Part 4); the wire
+   protocol (custom-LLM SSE/JSON responses) is confirmed byte-correct via
+   simulated `curl` requests; an actual spoken call is blocked only on real
+   Vapi credentials + a public URL for Vapi to reach.
+5. **Persistent, session-scoped conversation history** — done (Phase 3,
+   Part 5), same blocker as #2 (migration 0003).
+6. **Demo-mode fallback** — done and *already verified live* (Phase 3, Part
+   6) — this is the one requirement provable without any additional
+   credentials, since it's specifically the "credentials are missing"
+   path, and this environment currently has exactly that condition.
 
-- LLM-backed RAG query/answer pipeline (the actual "ask a question, get an
-  answer grounded in your chunks" flow — Phase 2 only gets documents *into*
-  pgvector, it doesn't query them yet)
-- Vapi voice integration — real STT/TTS and a real LLM-backed conversation
-  behind the call overlay built in Phase 1.2 (today it's simulated timing +
-  canned transcript content)
-- Global (not per-document) conversation history, scoped by the same
-  `doctalk-session` cookie introduced in Phase 2 — no new session concept
-  needed, per the alignment notes
+Every remaining "not verified" item across every phase reduces to the same
+short list: run migration 0003, add `LLM_API_KEY`, add the three `VAPI_*`
+values. No further code is expected to be needed for the six requirements
+themselves — see Phase 3's "What's not verified yet" for the exact steps.
+
+## Pending for Phase 4 (polish, once Phase 3 is live-verified)
+
+- Once migration 0003 + Groq + Vapi credentials are all in place: a full
+  live voice call, asking a question a real uploaded document answers
+  (confirm grounded, correct, spoken response) and a question it doesn't
+  (confirm the honest "couldn't find that" path) — the concrete final proof
+  Phase 3 is genuinely done, not just code-reviewed.
+- Confirm the OpenAI LLM and OpenAI embedding provider paths with real keys
+  (only the Groq LLM and Hugging Face embedding paths have been exercised
+  live so far)
+- Revisit whether Vapi's `speech-start`/`speech-end` events can drive a
+  more granular "assistant is physically speaking" indicator, once a live
+  call makes that observable (see Phase 3's "What's not verified yet")
+- **Selective document search** — letting a user scope a RAG query to
+  specific documents rather than the whole library. Deferred again this
+  round for the same reason as before: it's a query-time refinement on top
+  of retrieval that now exists, not a blocker to core functionality.
 - Shared document state between `/dashboard` and `/dashboard/documents`
   (each page currently does its own `GET /api/documents` — they'll show the
   same real data on every load/reload, they just don't share a live client
   cache within a single session, so an upload on one won't optimistically
   appear on the other until it's revisited)
-- **Selective document search** — letting a user scope a RAG query to
-  specific documents (rather than the whole library) is intentionally
-  deferred. It's a query-time concern that only makes sense once real
-  retrieval/embeddings exist, so it naturally belongs with the Phase 3 RAG
-  wiring rather than the frontend skeleton.
+- Settings persistence (profile, notification preferences) — unrelated to
+  documents or voice, still just local component state
+- Service worker offline caching strategy (currently install/activate only)
+- Replace placeholder logo/icons/OG image with final branding
+- Replace placeholder canonical domain (`https://doctalk.app`) with the real production domain

@@ -1,6 +1,7 @@
-export type VoicePhase = "listening" | "thinking" | "answering" | "pause";
+export type VoicePhase = "connecting" | "listening" | "thinking" | "answering" | "pause";
 
 export const PHASE_LABEL: Record<VoicePhase, string> = {
+  connecting: "Connecting…",
   listening: "Listening",
   thinking: "Thinking",
   answering: "Answering",

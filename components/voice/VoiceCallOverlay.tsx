@@ -3,19 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import { Loader2, Mic, MicOff, PhoneOff, X } from "lucide-react";
+import { AlertTriangle, Loader2, Mic, MicOff, PhoneOff, X } from "lucide-react";
 import { MicButton } from "@/components/voice/MicButton";
 import { Waveform } from "@/components/voice/Waveform";
 import { Typewriter } from "@/components/ui/Typewriter";
-import { demoExchanges } from "@/lib/mock-data";
-import { LISTENING_MS, PAUSE_MS, PHASE_LABEL, THINKING_MS, type VoicePhase } from "@/lib/voice-phase";
+import { useVoiceCall } from "@/lib/hooks/useVoiceCall";
+import { PHASE_LABEL } from "@/lib/voice-phase";
 import { cn } from "@/lib/utils";
-
-type TranscriptMessage = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-};
 
 function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -24,12 +18,18 @@ function formatDuration(totalSeconds: number) {
 }
 
 export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
-  const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<VoicePhase>("listening");
-  const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
-  const [isMuted, setIsMuted] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const {
+    isDemoMode,
+    connectionError,
+    phase,
+    transcript,
+    isMuted,
+    toggleMute,
+    hangUp,
+    handleAnswerTypewriterComplete,
+  } = useVoiceCall(onClose);
 
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -46,11 +46,12 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
   // Close on Escape.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") hangUp();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Focus the panel on open so screen readers announce the dialog.
   useEffect(() => {
@@ -62,46 +63,6 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
     const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
     return () => clearInterval(interval);
   }, []);
-
-  // Add the user's question bubble once per exchange.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setTranscript((prev) => [
-        ...prev,
-        { id: `user-${index}`, role: "user", text: demoExchanges[index].question },
-      ]);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [index]);
-
-  // Add the assistant's answer bubble once per exchange, right as "answering" begins.
-  useEffect(() => {
-    if (phase !== "answering") return;
-    const timer = setTimeout(() => {
-      setTranscript((prev) => [
-        ...prev,
-        { id: `assistant-${index}`, role: "assistant", text: demoExchanges[index].answer },
-      ]);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [phase, index]);
-
-  // Phase state machine — paused while muted.
-  useEffect(() => {
-    if (isMuted) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    if (phase === "listening") {
-      timer = setTimeout(() => setPhase("thinking"), LISTENING_MS);
-    } else if (phase === "thinking") {
-      timer = setTimeout(() => setPhase("answering"), THINKING_MS);
-    } else if (phase === "pause") {
-      timer = setTimeout(() => {
-        setIndex((i) => (i + 1) % demoExchanges.length);
-        setPhase("listening");
-      }, PAUSE_MS);
-    }
-    return () => clearTimeout(timer);
-  }, [phase, isMuted]);
 
   // Keep transcript pinned to the latest message, including while it's still being typed.
   useEffect(() => {
@@ -140,15 +101,22 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
         <header className="flex items-center justify-between border-b border-border px-5 py-4">
           <button
             type="button"
-            onClick={onClose}
+            onClick={hangUp}
             aria-label="Close voice call"
             className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <X aria-hidden="true" className="h-5 w-5" />
           </button>
-          <p className="text-sm font-medium tabular-nums text-muted-foreground">
-            {formatDuration(elapsedSeconds)}
-          </p>
+          <div className="flex items-center gap-2">
+            {isDemoMode && (
+              <span className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                Demo mode
+              </span>
+            )}
+            <p className="text-sm font-medium tabular-nums text-muted-foreground">
+              {formatDuration(elapsedSeconds)}
+            </p>
+          </div>
         </header>
 
         <div className="flex flex-col items-center gap-3 border-b border-border px-5 py-6">
@@ -162,7 +130,13 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-6">
           <div ref={contentRef} className="mx-auto flex max-w-lg flex-col gap-3">
-            {transcript.length === 0 && (
+            {connectionError && (
+              <div className="flex items-start gap-1.5 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-xs text-danger">
+                <AlertTriangle aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{connectionError}</span>
+              </div>
+            )}
+            {transcript.length === 0 && !connectionError && (
               <p className="text-center text-sm text-muted-foreground">
                 Say something to get started&hellip;
               </p>
@@ -184,7 +158,7 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
                     )}
                   >
                     {isActivelyTyping ? (
-                      <Typewriter text={message.text} speed={20} onComplete={() => setPhase("pause")} />
+                      <Typewriter text={message.text} speed={20} onComplete={handleAnswerTypewriterComplete} />
                     ) : (
                       message.text
                     )}
@@ -206,7 +180,7 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-center gap-4 border-t border-border px-5 py-5">
           <button
             type="button"
-            onClick={() => setIsMuted((m) => !m)}
+            onClick={toggleMute}
             aria-pressed={isMuted}
             aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
             className={cn(
@@ -225,7 +199,7 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={hangUp}
             aria-label="End call"
             className="flex h-14 w-14 items-center justify-center rounded-full bg-danger text-white transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >

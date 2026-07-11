@@ -14,7 +14,7 @@ const ringVariants = {
 
 export function MicButton({ phase }: { phase: VoicePhase }) {
   const isListening = phase === "listening";
-  const isThinking = phase === "thinking";
+  const isThinking = phase === "thinking" || phase === "connecting";
 
   return (
     <div className="relative flex h-24 w-24 items-center justify-center">
