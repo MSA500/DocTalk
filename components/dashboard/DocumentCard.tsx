@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, FileText, ScanText, Sparkles, UploadCloud, X } from "lucide-react";
 import type { DisplayDocument } from "@/lib/hooks/useDocumentWorkspace";
 import { formatFileSize } from "@/lib/document-type";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 import type { DocumentStatus } from "@/lib/types/document";
 
 const STAGES: { key: DocumentStatus; label: string; icon: typeof UploadCloud }[] = [
@@ -29,17 +29,6 @@ const STATUS_LABEL: Record<DisplayDocument["status"], string> = {
   ready: "Ready",
   failed: "Failed",
 };
-
-function relativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.round(diffMs / 60000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return `${days}d ago`;
-}
 
 type DocumentCardProps = {
   document: DisplayDocument;
@@ -81,7 +70,7 @@ export function DocumentCard({ document, onRemove }: DocumentCardProps) {
             {document.filename}
           </p>
           <p className="text-xs text-muted-foreground">
-            {formatFileSize(document.sizeBytes)} &middot; {relativeTime(document.createdAt)}
+            {formatFileSize(document.sizeBytes)} &middot; {formatRelativeTime(document.createdAt)}
           </p>
         </div>
       </div>

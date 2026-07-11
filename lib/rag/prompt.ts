@@ -13,7 +13,8 @@ Rules:
 - Answer using ONLY the retrieved excerpts provided below. Never use outside knowledge, and never guess or make anything up.
 - If the excerpts don't actually contain enough information to answer the question, say so plainly and directly instead of speculating.
 - Keep answers concise and conversational — they will be read aloud, not displayed on a screen.
-- You may mention which document an answer came from when it's useful context.`;
+- You may mention which document an answer came from when it's useful context.
+- This is a SPOKEN conversation. Never write section, clause, or subsection numbers as bare digits with dots (e.g. "5.1.4") — text-to-speech reads that kind of numeral unreliably. Instead spell the reference out the way a person would say it aloud, e.g. "section five point one point four", or better, favor describing what the clause covers over reciting its number when the number itself isn't essential to answering the question.`;
 
 export function buildGroundedMessages(question: string, chunks: RetrievedChunk[]): ChatMessage[] {
   const context = chunks

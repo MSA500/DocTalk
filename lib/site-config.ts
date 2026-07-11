@@ -44,6 +44,7 @@ export const footerNav: { title: string; links: NavLink[] }[] = [
       { label: "Dashboard", href: "/dashboard" },
       { label: "Voice Assistant", href: "/dashboard#voice-assistant" },
       { label: "Document Library", href: "/dashboard/documents" },
+      { label: "Conversation History", href: "/dashboard/history" },
     ],
   },
   {

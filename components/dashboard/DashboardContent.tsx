@@ -5,6 +5,7 @@ import { ArrowRight, UploadCloud } from "lucide-react";
 import { CompactUploadBar } from "@/components/dashboard/CompactUploadBar";
 import { DocumentLibrary } from "@/components/dashboard/DocumentLibrary";
 import { HiddenFileInput } from "@/components/dashboard/HiddenFileInput";
+import { RecentConversations } from "@/components/dashboard/RecentConversations";
 import { VoiceHeroPanel } from "@/components/voice/VoiceHeroPanel";
 import { useDocumentWorkspace } from "@/lib/hooks/useDocumentWorkspace";
 
@@ -75,6 +76,31 @@ export function DashboardContent() {
               isLoading={isLoading}
               loadError={loadError}
             />
+          </div>
+        </section>
+
+        <section aria-labelledby="recent-conversations-heading" id="recent-conversations" className="mt-10">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h2 id="recent-conversations-heading" className="text-xl font-semibold text-foreground">
+                Recent conversations
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your last few questions in this session.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/dashboard/history"
+            className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-brand transition-colors hover:text-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            View all history
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+          </Link>
+
+          <div className="mt-4">
+            <RecentConversations />
           </div>
         </section>
       </div>

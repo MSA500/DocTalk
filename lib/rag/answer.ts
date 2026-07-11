@@ -31,6 +31,8 @@ export async function generateAnswer(
   const answer =
     chunks.length === 0 ? NO_DOCUMENTS_ANSWER : await getLLMProvider().complete(buildGroundedMessages(question, chunks));
 
+  console.log(`generateAnswer: raw answer text = ${JSON.stringify(answer)}`);
+
   try {
     await logConversationTurn(supabase, sessionId, question, answer, referencedDocumentIds);
   } catch (err) {

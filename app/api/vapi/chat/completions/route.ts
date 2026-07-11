@@ -147,6 +147,8 @@ export async function POST(request: Request) {
     return respondWithFixedMessage(model, "I didn't catch a question — could you ask again?", wantsStream);
   }
 
+  console.log(`/api/vapi/chat/completions: question="${question}"`);
+
   try {
     const chunks = await searchDocumentChunks(supabase, sessionId, question);
     const referencedDocumentIds = Array.from(new Set(chunks.map((chunk) => chunk.documentId)));
@@ -161,6 +163,12 @@ export async function POST(request: Request) {
 
     if (!wantsStream) {
       const answer = await provider.complete(groundedMessages);
+      // Logged here, before any further handling, specifically so a
+      // garbled-in-speech report can be checked against the exact raw text
+      // the LLM produced — if this log line already looks garbled, the
+      // problem is upstream of Vapi/TTS; if it reads cleanly, the problem
+      // is in Vapi's TTS pronunciation, not our pipeline.
+      console.log(`/api/vapi/chat/completions: raw answer text (non-streaming) = ${JSON.stringify(answer)}`);
       void logTurnSafely(supabase, sessionId, question, answer, referencedDocumentIds);
       return NextResponse.json(nonStreamingCompletion(provider.model, answer));
     }
@@ -182,6 +190,9 @@ export async function POST(request: Request) {
           fullAnswer = fullAnswer || fallbackMessage;
           console.error("Streaming answer failed:", err);
         } finally {
+          // Same reasoning as the non-streaming log above — this is the
+          // exact concatenation of every delta actually sent to Vapi.
+          console.log(`/api/vapi/chat/completions: raw answer text (streamed) = ${JSON.stringify(fullAnswer)}`);
           controller.close();
           void logTurnSafely(supabase, sessionId, question, fullAnswer, referencedDocumentIds);
         }
