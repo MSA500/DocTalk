@@ -86,7 +86,15 @@ async function logTurnSafely(
 
 export async function POST(request: Request) {
   const url = new URL(request.url);
-  const callToken = url.searchParams.get("callToken");
+  // The client sets this via assistantOverrides.model.headers (see
+  // lib/hooks/useVoiceCall.ts) — a query-string fallback is kept too in
+  // case a future dashboard-configured assistant needs a non-header path,
+  // but the header is the one path actually exercised end to end.
+  const callToken = request.headers.get("x-doctalk-call-token") || url.searchParams.get("callToken");
+
+  console.log(
+    `/api/vapi/chat/completions: headerToken=${request.headers.get("x-doctalk-call-token") ? "present" : "absent"} queryToken=${url.searchParams.get("callToken") ? "present" : "absent"} resolvedCallToken=${callToken ? "present" : "MISSING"}`,
+  );
 
   let body: { model?: string; messages?: VapiChatMessage[]; stream?: boolean };
   try {
@@ -110,6 +118,7 @@ export async function POST(request: Request) {
   }
 
   const sessionId = callToken ? await resolveCallToken(supabase, callToken) : null;
+  console.log(`/api/vapi/chat/completions: resolved sessionId=${sessionId ?? "NONE"}`);
   if (!sessionId) {
     return respondWithFixedMessage(
       model,

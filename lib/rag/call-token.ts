@@ -28,11 +28,25 @@ export async function resolveCallToken(supabase: SupabaseClient, callToken: stri
     .eq("call_token", callToken)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    // Distinguish a real DB/query error (bad UUID format, missing table,
+    // RLS, etc.) from a genuine "no such token" — both used to collapse
+    // into a silent `null`, which made this indistinguishable from an
+    // expired/garbage token at the call site.
+    console.error(`resolveCallToken: query failed for callToken="${callToken}":`, error.message);
+    return null;
+  }
+  if (!data) {
+    console.warn(`resolveCallToken: no voice_call_tokens row found for callToken="${callToken}"`);
+    return null;
+  }
 
   const row = data as { session_id: string; created_at: string };
   const ageMs = Date.now() - new Date(row.created_at).getTime();
-  if (ageMs > CALL_TOKEN_MAX_AGE_MS) return null;
+  if (ageMs > CALL_TOKEN_MAX_AGE_MS) {
+    console.warn(`resolveCallToken: callToken="${callToken}" found but expired (age ${Math.round(ageMs / 1000)}s)`);
+    return null;
+  }
 
   return row.session_id;
 }
