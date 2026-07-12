@@ -10,11 +10,10 @@ const BASE_HEIGHTS = Array.from({ length: BAR_COUNT }, (_, i) => {
   return 0.25 + wave * 0.65;
 });
 
-// Hoisted to module scope so every bar's animate/transition object keeps the
-// same reference across renders (they used to be created inline in JSX, so
-// any re-render of a parent that renders <Waveform active /> — HeroPreview's
-// prompt-cycling timer, VoiceCallOverlay's once-a-second call timer — handed
-// Framer Motion a brand-new, if value-identical, animate target every time).
+// Hoisted to module scope so animate/transition objects keep a stable
+// reference across renders — inline JSX objects gave Framer Motion a new,
+// value-identical animate target on every parent re-render (e.g. the call
+// timer ticking once a second), restarting the animation each time.
 const ACTIVE_ANIMATE = BASE_HEIGHTS.map((base) => ({
   height: [
     `${base * 20}%`,
@@ -52,16 +51,11 @@ export function Waveform({ active = false, className }: WaveformProps) {
             "w-1 rounded-full",
             active ? "bg-brand" : "bg-border",
           )}
-          // No `initial` override here — deliberately. `initial={false}`
-          // (the previous setting) skips Framer Motion's enter transition
-          // entirely, and for an array-valued `animate.height` combined
-          // with `repeat: Infinity`, that turned out to mean the bar just
-          // snapped straight to the *last* keyframe and sat there forever
-          // instead of ever starting the repeat loop — confirmed via CDP:
-          // every bar frozen at its final keyframe value, unchanging across
-          // 6+ seconds of sampling. Leaving `initial` unset lets Framer
-          // Motion infer it from `animate`'s first keyframe on mount, which
-          // is what actually kicks the loop off.
+          // No `initial` override, deliberately: `initial={false}` combined with
+          // an array-valued `animate.height` + `repeat: Infinity` snaps the bar
+          // straight to the last keyframe and never starts the loop (confirmed
+          // via CDP). Leaving `initial` unset lets Framer Motion infer it from
+          // `animate`'s first keyframe, which is what actually starts the loop.
           animate={active ? ACTIVE_ANIMATE[i] : IDLE_ANIMATE}
           transition={active ? ACTIVE_TRANSITION[i] : IDLE_TRANSITION}
         />

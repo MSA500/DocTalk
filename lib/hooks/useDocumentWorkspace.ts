@@ -125,8 +125,7 @@ export function useDocumentWorkspace() {
           stopPolling(id);
         }
       } catch {
-        // Transient network hiccup — let the next tick (or the /process
-        // request's own response) resolve things instead of failing here.
+        // Let the next tick (or /process's own response) resolve things.
       }
     }, POLL_INTERVAL_MS);
 
@@ -165,15 +164,13 @@ export function useDocumentWorkspace() {
       }
     } catch {
       stopPolling(document.id);
-      // The row may still have reached a terminal state server-side even
-      // though this request itself dropped — check once more before giving up.
+      // The row may have reached a terminal state server-side even though
+      // this request dropped — check once more before giving up.
       try {
         const response = await fetch(`/api/documents/${document.id}`);
         const body = await response.json();
         if (body?.document) updateDocument(body.document);
-      } catch {
-        // Leave the document showing its last known polled status.
-      }
+      } catch {}
       showToast({
         variant: "error",
         title: "Processing interrupted",

@@ -14,10 +14,8 @@ export function getConfigStatus(): ConfigStatus {
   };
 }
 
-// Every piece has to be real for a live voice call to work end to end
-// (Supabase for storage/history, embeddings + LLM for RAG, Vapi for the
-// call itself) — if any one is missing, the voice overlay falls back to
-// the Phase 1 canned demo rather than partially working.
+// Every piece must be configured for a live voice call to work end to end —
+// if any one is missing, the voice overlay falls back to demo mode.
 export function isFullyConfiguredForVoice(status: ConfigStatus): boolean {
   return status.supabaseConfigured && status.embeddingConfigured && status.llmConfigured && status.vapiConfigured;
 }

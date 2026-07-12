@@ -3,7 +3,7 @@ import { DocumentsPageContent } from "@/components/dashboard/DocumentsPageConten
 
 export const metadata: Metadata = {
   title: "All Documents",
-  description: "Browse and manage every document uploaded in this DocTalk preview session.",
+  description: "Browse and manage every document you've uploaded to DocTalk.",
   alternates: {
     canonical: "/dashboard/documents",
   },

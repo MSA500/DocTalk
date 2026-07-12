@@ -6,7 +6,6 @@ export interface EmbeddingProvider {
 export class EmbeddingConfigError extends Error {}
 
 // Must match document_chunks.embedding's fixed width in
-// supabase/migrations/0001_init.sql. Swapping EMBEDDING_PROVIDER/MODEL to
-// one with a different output dimension requires a matching DB migration —
-// see the comment at the top of that file.
+// supabase/migrations/0001_init.sql — changing EMBEDDING_PROVIDER/MODEL to a
+// different output dimension requires a matching DB migration.
 export const EXPECTED_EMBEDDING_DIMENSIONS = 384;

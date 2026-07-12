@@ -7,9 +7,6 @@ import { toDocumentRecord, type DocumentRow } from "@/lib/types/document";
 
 export const runtime = "nodejs";
 
-// Polled by the client while a document's status is uploading/extracting/
-// embedding, to reflect real backend pipeline progress instead of a stalled
-// progress bar — see lib/hooks/useDocumentWorkspace.ts.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -79,8 +76,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       try {
         await deleteDocumentFile(documentRow.storage_path);
       } catch {
-        // Storage cleanup best-effort — an orphaned file is a smaller problem
-        // than a document the user can no longer remove from the library.
+        // Best-effort: an orphaned file beats a document the user can't remove.
       }
     }
 

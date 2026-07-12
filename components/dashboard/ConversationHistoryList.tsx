@@ -49,9 +49,8 @@ export function ConversationHistoryList({
     );
   }
 
-  // Most recent first — the API returns ascending (chronological) order,
-  // which is the right order for a live transcript, but a browsable
-  // history reads better newest-on-top. No backend change needed for this.
+  // API returns chronological order (right for a live transcript); reverse
+  // here since a browsable history reads better newest-on-top.
   const mostRecentFirst = [...turns].reverse();
 
   return (

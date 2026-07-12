@@ -1,7 +1,7 @@
 {
   "name": "DocTalk — Voice-Enabled RAG Document Assistant",
   "short_name": "DocTalk",
-  "description": "Upload documents, ask questions out loud, and get grounded, source-backed answers.",
+  "description": "Upload your PDFs, Word documents, or text files, and talk to DocTalk to get instant answers grounded entirely in your own content.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

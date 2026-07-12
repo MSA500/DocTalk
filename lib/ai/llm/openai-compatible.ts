@@ -7,11 +7,8 @@ type CreateOpenAICompatibleProviderOptions = {
   providerLabel: string;
 };
 
-// Groq and OpenAI both speak the exact same POST {baseUrl}/chat/completions
-// wire format (Groq is deliberately OpenAI-compatible), so this one
-// implementation backs both lib/ai/llm/groq.ts and lib/ai/llm/openai.ts —
-// duplicating the fetch/SSE-parsing logic per provider would just be the
-// same code twice.
+// Groq and OpenAI both speak the same chat/completions wire format, so this
+// one implementation backs both lib/ai/llm/groq.ts and lib/ai/llm/openai.ts.
 export function createOpenAICompatibleProvider({
   apiKey,
   baseUrl,

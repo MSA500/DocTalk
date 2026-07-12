@@ -1,18 +1,15 @@
 import type { ChatMessage } from "@/lib/ai/llm";
 import type { RetrievedChunk } from "@/lib/rag/search";
 
-// Used verbatim whenever retrieval finds nothing at all, or nothing even
-// loosely related (top similarity below NEAR_MISS_SIMILARITY_THRESHOLD) —
-// the LLM is never even called in that case, so there's no way for it to
-// hallucinate an answer to a question with zero supporting context.
+// Used verbatim when retrieval finds nothing (or nothing above
+// NEAR_MISS_SIMILARITY_THRESHOLD) — the LLM is never called in that case,
+// so it can't hallucinate an answer with zero supporting context.
 export const NO_DOCUMENTS_ANSWER =
   "I couldn't find anything about that in your uploaded documents. Try uploading a document that covers this, or ask something else.";
 
 // Cosine similarity thresholds for the default embedding model
-// (sentence-transformers/all-MiniLM-L6-v2 — see
-// lib/ai/embeddings/huggingface.ts). Tuned empirically this round against a
-// real document (a short report naming a specific, unusual entity —
-// "Kalsoom Ahmad Hospital") and real Hugging Face embeddings, not guessed:
+// (sentence-transformers/all-MiniLM-L6-v2 — see lib/ai/embeddings/huggingface.ts).
+// Tuned empirically against a real document and real Hugging Face embeddings:
 //
 //   exact name match ("What is Kalsoom Ahmad Hospital?")            0.731
 //   topic paraphrase, no exact name ("the hospital in this report") 0.772
@@ -23,14 +20,11 @@ export const NO_DOCUMENTS_ANSWER =
 //   unrelated, different domain ("bake a chocolate cake")           0.349
 //
 // The first guessed values (0.45 / 0.28) were wrong for this model — even
-// the fully unrelated queries scored well above them, which would have
-// classified plainly out-of-scope questions as "near-miss". Full numbers
-// and the actual live-tested answers are in Project_status.md.
+// unrelated queries scored above them. Full numbers in Project_status.md.
 //
 //   >= CONFIDENT (0.70)  -> answer normally, grounded in the excerpts.
-//   >= NEAR_MISS (0.45) but < CONFIDENT -> real but weak signal, the classic
-//     "speech-to-text mangled a proper noun" shape -> a "did you mean"
-//     style clarifying answer instead of a flat "not found".
+//   >= NEAR_MISS (0.45) but < CONFIDENT -> weak signal (likely a
+//     speech-to-text mangled proper noun) -> a "did you mean" style answer.
 //   < NEAR_MISS (or zero chunks) -> treated as no match at all.
 export const CONFIDENT_SIMILARITY_THRESHOLD = 0.7;
 export const NEAR_MISS_SIMILARITY_THRESHOLD = 0.45;
@@ -54,14 +48,10 @@ Rules:
 - You may mention which document an answer came from when it's useful context.
 - This is a SPOKEN conversation. Never write section, clause, or subsection numbers as bare digits with dots (e.g. "5.1.4") — text-to-speech reads that kind of numeral unreliably. Instead spell the reference out the way a person would say it aloud, e.g. "section five point one point four", or better, favor describing what the clause covers over reciting its number when the number itself isn't essential to answering the question.`;
 
-// Used specifically for the "near-miss" classification — retrieval found
-// something, but not confidently enough to just answer as if the question
-// matched. This is the generalized fix for misheard/mismatched entity
-// names (a wrong hospital, person, place, document title, technical term,
-// etc. from imperfect speech-to-text): rather than only ever saying "not
-// found", the model is asked to look for a plausible near-miss *that
-// actually appears in the retrieved text* and offer it as a clarifying
-// suggestion — never inventing a name from outside the excerpts.
+// For the "near-miss" classification: rather than saying "not found", the
+// model looks for a plausible near-miss that actually appears in the
+// retrieved text and offers it as a clarifying suggestion — never inventing
+// a name from outside the excerpts.
 const NEAR_MISS_SYSTEM_PROMPT = `You are DocTalk, a voice assistant that answers questions using only the user's own uploaded documents.
 
 The excerpts below are only a loose match for the question as asked — nothing in them directly confirms the exact name or term the user used. This commonly happens when speech-to-text mishears a specific name: a person, place, organization, document title, or technical term.
@@ -91,9 +81,8 @@ export function buildNearMissMessages(question: string, chunks: RetrievedChunk[]
   ];
 }
 
-// Single decision point shared by both /api/rag/answer and the Vapi
-// streaming route, so the two entry points can never drift apart on this
-// logic. Returns null for "none" — callers should use NO_DOCUMENTS_ANSWER
+// Shared by /api/rag/answer and the Vapi streaming route so they can't drift
+// apart. Returns null for "none" — callers should use NO_DOCUMENTS_ANSWER
 // directly rather than calling the LLM at all.
 export function buildMessagesForClassification(
   question: string,

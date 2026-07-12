@@ -10,10 +10,6 @@ type InstallAppButtonProps = {
   className?: string;
 };
 
-// Renders nothing when there's genuinely nothing to offer (already
-// installed, or a desktop browser that hasn't fired beforeinstallprompt and
-// isn't iOS Safari) — this is a manual trigger point, not a nag, so it only
-// ever shows up when there's a real action available.
 export function InstallAppButton({ variant = "full", className }: InstallAppButtonProps) {
   const { state, promptInstall } = usePwaInstall();
   const { showToast } = useToast();

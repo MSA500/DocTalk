@@ -5,7 +5,7 @@ import { siteConfig } from "@/lib/site-config";
 export const metadata: Metadata = {
   title: "Dashboard",
   description:
-    "Upload documents, browse your library, and preview the DocTalk voice assistant.",
+    "Upload documents, browse your library, and talk to your DocTalk voice assistant.",
   alternates: {
     canonical: "/dashboard",
   },
@@ -19,8 +19,7 @@ export default function DashboardPage() {
           Dashboard
         </h1>
         <p className="mt-2 max-w-2xl text-muted-foreground">
-          This is a static preview of the {siteConfig.name} dashboard. Upload
-          and document processing shown here are simulated for Phase 1.
+          Upload a document, then ask {siteConfig.name} about it out loud.
         </p>
       </div>
 

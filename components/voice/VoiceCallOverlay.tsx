@@ -34,7 +34,6 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Lock background scroll while the call is open.
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -43,7 +42,6 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  // Close on Escape.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") hangUp();
@@ -53,18 +51,16 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Focus the panel on open so screen readers announce the dialog.
   useEffect(() => {
     panelRef.current?.focus();
   }, []);
 
-  // Call duration timer.
   useEffect(() => {
     const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Keep transcript pinned to the latest message, including while it's still being typed.
+  // Re-pins scroll on any content resize, including mid-typewriter growth.
   useEffect(() => {
     const content = contentRef.current;
     const scrollEl = scrollRef.current;

@@ -58,7 +58,7 @@ export function Hero() {
               href="/dashboard"
               className="inline-flex items-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-brand-foreground transition-colors hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              Try the demo
+              Try DocTalk
               <ArrowRight aria-hidden="true" className="h-4 w-4" />
             </Link>
             <a

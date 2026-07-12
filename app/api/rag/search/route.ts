@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { searchDocumentChunks } from "@/lib/rag/search";
+import { MAX_QUESTION_LENGTH } from "@/lib/rag/constants";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { SESSION_COOKIE, isValidSessionId } from "@/lib/session-cookie";
 
 export const runtime = "nodejs";
@@ -12,11 +14,6 @@ function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
-// Standalone vector similarity search — embeds `query` and returns the
-// top-K matching chunks from this session's own ready documents, with no
-// LLM call involved. Exists both as a real capability in its own right and
-// as an independently-testable/curl-able building block of
-// POST /api/rag/answer.
 export async function POST(request: Request) {
   try {
     return await handleSearch(request);
@@ -32,6 +29,11 @@ async function handleSearch(request: Request) {
     return errorResponse("NO_SESSION", "Missing session cookie.", 400);
   }
 
+  const rateLimit = checkRateLimit(`rag-search:${sessionId}`, 30, 5 * 60 * 1000);
+  if (!rateLimit.allowed) {
+    return errorResponse("RATE_LIMITED", "Too many search requests. Please slow down and try again shortly.", 429);
+  }
+
   let body: { query?: unknown };
   try {
     body = await request.json();
@@ -42,6 +44,9 @@ async function handleSearch(request: Request) {
   const query = typeof body.query === "string" ? body.query.trim() : "";
   if (!query) {
     return errorResponse("VALIDATION_FAILED", 'A non-empty "query" string is required.', 400);
+  }
+  if (query.length > MAX_QUESTION_LENGTH) {
+    return errorResponse("VALIDATION_FAILED", `"query" must be ${MAX_QUESTION_LENGTH} characters or fewer.`, 400);
   }
 
   let supabase: SupabaseClient;

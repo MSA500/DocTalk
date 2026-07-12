@@ -19,11 +19,10 @@ type MatchDocumentChunksRow = {
 
 const DEFAULT_TOP_K = 5;
 
-// Embeds the question, then delegates the actual similarity search to the
-// match_document_chunks() Postgres function (supabase/migrations/
-// 0003_rag_and_conversation_history.sql) — a plain supabase-js .select()
-// can't order by pgvector distance or join documents in the same query.
-// Scoped to sessionId's own ready documents only; never crosses sessions.
+// Delegates to the match_document_chunks() Postgres function (supabase/
+// migrations/0003_rag_and_conversation_history.sql) since a plain
+// supabase-js .select() can't order by pgvector distance. Scoped to
+// sessionId's own ready documents only; never crosses sessions.
 export async function searchDocumentChunks(
   supabase: SupabaseClient,
   sessionId: string,

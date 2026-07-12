@@ -6,9 +6,6 @@ import { SESSION_COOKIE, isValidSessionId } from "@/lib/session-cookie";
 
 export const runtime = "nodejs";
 
-// Global (not per-document) conversation history for the current session —
-// polled once when the voice overlay opens so past turns can be shown in
-// the transcript immediately, before any new question is asked.
 export async function GET() {
   try {
     const cookieStore = await cookies();

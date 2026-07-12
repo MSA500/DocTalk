@@ -33,7 +33,7 @@ export function DocumentsPageContent() {
         All documents
       </h1>
       <p className="mt-2 max-w-2xl text-muted-foreground">
-        Everything you&apos;ve uploaded in this preview session.
+        Everything you&apos;ve uploaded to DocTalk.
       </p>
 
       <HiddenFileInput inputRef={fileInputRef} onChange={handleInputChange} />

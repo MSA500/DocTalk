@@ -1,10 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Tokens aren't explicitly deleted after use (a voice call can legitimately
-// make several requests to /api/vapi/chat/completions over its lifetime,
-// one per question), so instead of a single-use/expiring row, anything
-// older than this is just treated as invalid on lookup — sufficient at this
-// scale without a scheduled cleanup job.
+// Tokens aren't deleted after use (one call makes several requests, one per
+// question) — anything older than this is just treated as invalid on lookup.
 const CALL_TOKEN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 export async function createCallToken(supabase: SupabaseClient, sessionId: string): Promise<string> {
@@ -29,10 +26,6 @@ export async function resolveCallToken(supabase: SupabaseClient, callToken: stri
     .maybeSingle();
 
   if (error) {
-    // Distinguish a real DB/query error (bad UUID format, missing table,
-    // RLS, etc.) from a genuine "no such token" — both used to collapse
-    // into a silent `null`, which made this indistinguishable from an
-    // expired/garbage token at the call site.
     console.error(`resolveCallToken: query failed for callToken="${callToken}":`, error.message);
     return null;
   }

@@ -3,8 +3,8 @@ export const siteConfig = {
   shortName: "DocTalk",
   tagline: "Talk to your documents.",
   description:
-    "DocTalk is a voice-enabled RAG assistant. Upload your documents, ask questions out loud, and get grounded, source-backed answers in seconds.",
-  url: "https://doctalk.app",
+    "DocTalk is a voice-powered document assistant. Upload your PDFs, Word documents, or text files, and simply talk to DocTalk to get instant, accurate answers grounded entirely in your own content — no hallucinations, no guesswork. Powered by retrieval-augmented generation and real-time voice AI, DocTalk turns your documents into a conversation.",
+  url: "https://doc-talk-buddy.vercel.app",
   ogImage: "/og-image.png",
   keywords: [
     "DocTalk",

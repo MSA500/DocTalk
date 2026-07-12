@@ -10,6 +10,7 @@ import {
   validateFileSize,
 } from "@/lib/documents/validate-upload";
 import { SESSION_COOKIE, isValidSessionId } from "@/lib/session-cookie";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { toDocumentRecord, type DocumentRow } from "@/lib/types/document";
 
 export const runtime = "nodejs";
@@ -19,13 +20,8 @@ function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
-// This route only validates, stores the raw file, and creates the document
-// row — it deliberately returns before extraction/chunking/embedding so the
-// client gets a fast response and can start polling GET /api/documents/[id]
-// for real status updates instead of the whole pipeline running inside one
-// long request. The actual processing happens in
-// POST /api/documents/[id]/process, which the client calls immediately
-// after this one succeeds.
+// Returns before extraction/chunking/embedding so the client gets a fast
+// response; the client then calls POST /api/documents/[id]/process.
 export async function POST(request: Request) {
   try {
     return await handleUpload(request);
@@ -48,6 +44,11 @@ async function handleUpload(request: Request) {
   const sessionId = cookieStore.get(SESSION_COOKIE)?.value;
   if (!isValidSessionId(sessionId)) {
     return errorResponse("NO_SESSION", "Missing session cookie.", 400);
+  }
+
+  const rateLimit = checkRateLimit(`upload:${sessionId}`, 10, 10 * 60 * 1000);
+  if (!rateLimit.allowed) {
+    return errorResponse("RATE_LIMITED", "Too many uploads. Please slow down and try again shortly.", 429);
   }
 
   let supabase: SupabaseClient;
@@ -134,10 +135,8 @@ async function handleUpload(request: Request) {
     .single();
 
   if (updateError || !updated) {
-    // The file made it to Storage but the row couldn't be updated to point
-    // at it — surface this loudly rather than returning a document whose
-    // storage_path silently never got persisted (which /process would then
-    // fail to download with a confusing "Invalid key" error).
+    // File is in Storage but storage_path failed to persist — fail loudly
+    // now rather than letting /process fail later with a confusing error.
     const { data } = await supabase
       .from("documents")
       .update({

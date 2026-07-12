@@ -6,9 +6,8 @@ export class TextExtractionError extends Error {}
 
 async function extractPdf(buffer: Buffer): Promise<string> {
   try {
-    // unpdf (via pdf.js) explicitly rejects a Node Buffer and requires a
-    // plain Uint8Array — slice the view rather than copy so a Buffer that's
-    // offset into a larger pooled ArrayBuffer doesn't pull in extra bytes.
+    // pdf.js rejects a Node Buffer; slice the view (not copy) to respect
+    // a Buffer offset into a larger pooled ArrayBuffer.
     const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
     const { text } = await extractPdfText(data, { mergePages: true });
     return text;

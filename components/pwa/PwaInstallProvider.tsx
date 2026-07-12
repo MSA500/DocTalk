@@ -2,21 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
-// Not in lib.dom.d.ts yet — this is the real shape Chrome/Edge/Android
-// WebView dispatch.
+// Not yet in lib.dom.d.ts — this is the real shape Chrome/Edge/Android dispatch.
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-// - "installable": a real beforeinstallprompt event is captured and ready —
-//   promptInstall() will show the browser's native install dialog.
-// - "ios-manual": iOS Safari never fires beforeinstallprompt at all (no
-//   programmatic install API exists there), but the app isn't installed yet
-//   — show instructions instead of a non-functional button.
-// - "installed": already running standalone (or install just completed).
-// - "unavailable": nothing to offer — desktop browser without PWA support,
-//   or beforeinstallprompt hasn't fired (yet) and it isn't iOS Safari.
+// "ios-manual": iOS Safari never fires beforeinstallprompt, so show manual
+// instructions instead of a non-functional button.
 export type PwaInstallState = "installable" | "ios-manual" | "installed" | "unavailable";
 
 type PwaInstallContextValue = {
@@ -26,13 +19,8 @@ type PwaInstallContextValue = {
 
 const PwaInstallContext = createContext<PwaInstallContextValue | null>(null);
 
-// Both of these read browser-only APIs that don't exist during SSR, and can
-// legitimately differ between the server-rendered guess (always "no") and
-// the real client answer — same class of problem lib/hooks/useHasMounted.ts
-// exists for. Read via useSyncExternalStore (getServerSnapshot always
-// false, matching what the server rendered) rather than an effect + setState
-// on mount, which avoids both a hydration mismatch and an unnecessary extra
-// render pass.
+// useSyncExternalStore (getServerSnapshot always false, matching SSR) avoids
+// the hydration mismatch an effect + setState on mount would cause here.
 function subscribeToDisplayMode(callback: () => void) {
   const mql = window.matchMedia("(display-mode: standalone)");
   mql.addEventListener("change", callback);
@@ -71,10 +59,7 @@ export function PwaInstallProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function onBeforeInstallPrompt(event: Event) {
-      // Suppress the browser's own automatic mini-infobar/prompt — this app
-      // shows its own manual "Install App" trigger instead (Settings + a
-      // compact header button), fired only on explicit user click, never
-      // automatically and never repeated.
+      // Suppress the browser's automatic prompt; app shows its own trigger instead.
       event.preventDefault();
       setDeferredEvent(event as BeforeInstallPromptEvent);
     }

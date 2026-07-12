@@ -1,0 +1,23 @@
+Acme Robotics — Remote Work Policy
+
+Effective Date: January 1, 2026
+
+1. Eligibility
+All full-time employees who have completed their 90-day probationary period are eligible to work remotely up to three days per week, subject to manager approval. Employees in roles requiring on-site equipment (hardware assembly, lab testing) are not eligible for remote work on lab days.
+
+2. Core Hours
+Remote employees are expected to be reachable between 10:00 AM and 4:00 PM in their local time zone, regardless of which days they work remotely. Meetings should be scheduled within core hours whenever possible.
+
+3. Equipment and Expenses
+Acme Robotics provides a one-time home office stipend of $500 for new remote employees, covering items such as a monitor, keyboard, or ergonomic chair. Internet costs are not reimbursed. Employees must use company-issued laptops for all work; personal devices may not be used to access internal systems.
+
+4. Security Requirements
+Remote employees must connect to internal systems only through the company VPN. Screens must be locked whenever a device is left unattended. Working from public spaces such as cafes is discouraged for any task involving confidential client data.
+
+5. Performance Expectations
+Remote work arrangements are reviewed quarterly alongside regular performance reviews. Managers may revoke remote work privileges for individual employees if response times, meeting attendance, or deliverable quality decline.
+
+6. Requesting a Change
+Employees wishing to increase their remote days beyond three per week should submit a request through the HR portal at least two weeks in advance. Fully remote arrangements are evaluated on a case-by-case basis by the department head.
+
+For questions about this policy, contact the People Operations team.

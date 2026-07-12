@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { Briefcase, Globe, Mail } from "lucide-react";
+import { Briefcase, Globe } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { footerNav, siteConfig } from "@/lib/site-config";
 
 const socialLinks = [
   { label: "GitHub", href: siteConfig.links.github, icon: Globe },
   { label: "LinkedIn", href: siteConfig.links.linkedin, icon: Briefcase },
-  { label: "Email", href: "mailto:hello@doctalk.app", icon: Mail },
 ];
 
 export function Footer() {
@@ -62,7 +61,7 @@ export function Footer() {
             reserved.
           </p>
           <p className="text-sm text-muted-foreground">
-            Phase 1 skeleton &mdash; built with Next.js
+            Built with Next.js
           </p>
         </div>
       </div>

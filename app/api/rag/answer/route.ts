@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { generateAnswer } from "@/lib/rag/answer";
+import { MAX_QUESTION_LENGTH } from "@/lib/rag/constants";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { SESSION_COOKIE, isValidSessionId } from "@/lib/session-cookie";
 
 export const runtime = "nodejs";
@@ -12,11 +14,8 @@ function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
-// One full, non-streaming RAG turn (retrieve -> ground -> generate -> log)
-// in a single request/response — used for direct verification without a
-// live Vapi call, and available as a plain text-answer path in general.
-// The real-time voice path (POST /api/vapi/chat/completions) shares this
-// same retrieval/prompt/logging logic but streams the LLM response instead.
+// Non-streaming RAG turn; the voice path (/api/vapi/chat/completions) shares
+// the same retrieval/prompt/logging logic but streams the LLM response.
 export async function POST(request: Request) {
   try {
     return await handleAnswer(request);
@@ -32,6 +31,11 @@ async function handleAnswer(request: Request) {
     return errorResponse("NO_SESSION", "Missing session cookie.", 400);
   }
 
+  const rateLimit = checkRateLimit(`rag-answer:${sessionId}`, 20, 5 * 60 * 1000);
+  if (!rateLimit.allowed) {
+    return errorResponse("RATE_LIMITED", "Too many questions. Please slow down and try again shortly.", 429);
+  }
+
   let body: { question?: unknown };
   try {
     body = await request.json();
@@ -42,6 +46,9 @@ async function handleAnswer(request: Request) {
   const question = typeof body.question === "string" ? body.question.trim() : "";
   if (!question) {
     return errorResponse("VALIDATION_FAILED", 'A non-empty "question" string is required.', 400);
+  }
+  if (question.length > MAX_QUESTION_LENGTH) {
+    return errorResponse("VALIDATION_FAILED", `"question" must be ${MAX_QUESTION_LENGTH} characters or fewer.`, 400);
   }
 
   let supabase: SupabaseClient;

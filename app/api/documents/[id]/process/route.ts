@@ -11,6 +11,7 @@ import {
   getEmbeddingProvider,
 } from "@/lib/ai/embeddings";
 import { SESSION_COOKIE, isValidSessionId } from "@/lib/session-cookie";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { toDocumentRecord, type DocumentRow } from "@/lib/types/document";
 
 export const runtime = "nodejs";
@@ -23,11 +24,8 @@ function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
-// Does the actual extract -> chunk -> embed -> store work for a document
-// that POST /api/documents/upload already created and stored the raw file
-// for. Split out into its own request specifically so the client can poll
-// GET /api/documents/[id] while this one is in flight and show real,
-// current pipeline stages instead of a upload progress bar frozen at 100%.
+// Split out from upload so the client can poll GET /api/documents/[id] for
+// live pipeline stages while this runs, instead of a frozen progress bar.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     return await handleProcess(await params);
@@ -41,6 +39,11 @@ async function handleProcess({ id }: { id: string }) {
   const sessionId = cookieStore.get(SESSION_COOKIE)?.value;
   if (!isValidSessionId(sessionId)) {
     return errorResponse("NO_SESSION", "Missing session cookie.", 400);
+  }
+
+  const rateLimit = checkRateLimit(`process:${sessionId}`, 15, 10 * 60 * 1000);
+  if (!rateLimit.allowed) {
+    return errorResponse("RATE_LIMITED", "Too many requests. Please slow down and try again shortly.", 429);
   }
 
   let supabase: SupabaseClient;
@@ -66,9 +69,7 @@ async function handleProcess({ id }: { id: string }) {
 
   const documentRow = existing as DocumentRow;
 
-  // Idempotency guard — if this has already reached a terminal state
-  // (e.g. the client retried the call), just return it as-is rather than
-  // reprocessing.
+  // Idempotency guard against client retries — don't reprocess a terminal document.
   if (documentRow.status === "ready" || documentRow.status === "failed") {
     return NextResponse.json({ document: toDocumentRecord(documentRow) });
   }

@@ -15,7 +15,7 @@ const features = [
     icon: FileUp,
     title: "Bring your own documents",
     description:
-      "Upload PDFs, docs, notes, and spreadsheets. DocTalk indexes them automatically, no setup required.",
+      "Upload PDFs, Word documents, and text files. DocTalk indexes them automatically, no setup required.",
   },
   {
     icon: Mic,
@@ -44,7 +44,7 @@ const features = [
   {
     icon: Layers,
     title: "Works with your formats",
-    description: "PDF, DOCX, TXT, Markdown, CSV, and more, out of the box.",
+    description: "PDF, DOCX, and TXT files, indexed automatically the moment you upload them.",
   },
 ];
 

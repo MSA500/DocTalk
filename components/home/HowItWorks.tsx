@@ -12,7 +12,7 @@ const steps = [
   {
     icon: Mic,
     title: "Ask",
-    description: "Speak or type your question in plain language, just like talking to a person.",
+    description: "Speak your question in plain language, just like talking to a person.",
   },
   {
     icon: MessageSquareText,

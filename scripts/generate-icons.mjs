@@ -37,8 +37,7 @@ function insideRoundedRect(px, py, w, h, r) {
   if (px < r && py < r) return dist(px, py, r, r) <= r;
   if (px >= w - r && py < r) return dist(px, py, w - r - 1, r) <= r;
   if (px < r && py >= h - r) return dist(px, py, r, h - r - 1) <= r;
-  if (px >= w - r && py >= h - r)
-    return dist(px, py, w - r - 1, h - r - 1) <= r;
+  if (px >= w - r && py >= h - r) return dist(px, py, w - r - 1, h - r - 1) <= r;
   return true;
 }
 
@@ -62,28 +61,27 @@ function fillRect(canvas, x0, y0, w, h, color, radius = 0) {
   }
 }
 
-function drawWaveformMark(canvas, cx, cy, spacing, maxHeight, color) {
-  const bars = [
-    { dx: -1.5, h: 0.4 },
-    { dx: -0.5, h: 0.85 },
-    { dx: 0.5, h: 1 },
-    { dx: 1.5, h: 0.6 },
-  ];
-  const barWidth = 0.6 * spacing;
-  for (const bar of bars) {
-    const barHeight = bar.h * maxHeight;
-    const x0 = Math.round(cx + bar.dx * spacing - barWidth / 2);
-    const y0 = Math.round(cy - barHeight / 2);
-    const radius = Math.max(1, Math.round(barWidth / 2));
-    fillRect(
-      canvas,
-      x0,
-      y0,
-      Math.round(barWidth),
-      Math.round(barHeight),
-      color,
-      radius,
-    );
+// Same 4-bar mark as components/ui/Logo.tsx's variant="mark" SVG (viewBox
+// 0 0 48 48), expressed as ratios so it rasterizes at any size and stays
+// pixel-proportional to the real logo used in the header.
+const LOGO_MARK_BARS = [
+  { x: 12.5 / 48, y: 20.5 / 48, w: 4 / 48, h: 7 / 48 },
+  { x: 19.5 / 48, y: 14 / 48, w: 4 / 48, h: 20 / 48 },
+  { x: 26.5 / 48, y: 10.5 / 48, w: 4 / 48, h: 27 / 48 },
+  { x: 33.5 / 48, y: 17 / 48, w: 4 / 48, h: 14 / 48 },
+];
+const LOGO_MARK_BAR_RADIUS_RATIO = 2 / 48;
+const LOGO_MARK_BG_RADIUS_RATIO = 11.5 / 48;
+
+function drawLogoMark(canvas, size, scale, color) {
+  const offset = (size - size * scale) / 2;
+  for (const bar of LOGO_MARK_BARS) {
+    const w = bar.w * size * scale;
+    const h = bar.h * size * scale;
+    const x0 = Math.round(offset + bar.x * size * scale);
+    const y0 = Math.round(offset + bar.y * size * scale);
+    const radius = Math.max(1, Math.round((LOGO_MARK_BAR_RADIUS_RATIO * size * scale) / 2));
+    fillRect(canvas, x0, y0, Math.round(w), Math.round(h), color, radius);
   }
 }
 
@@ -105,14 +103,7 @@ function drawBitmapText(canvas, text, x0, y0, pixelSize, color) {
     for (let row = 0; row < glyph.length; row++) {
       for (let col = 0; col < glyph[row].length; col++) {
         if (glyph[row][col] === "1") {
-          fillRect(
-            canvas,
-            cursorX + col * pixelSize,
-            y0 + row * pixelSize,
-            pixelSize,
-            pixelSize,
-            color,
-          );
+          fillRect(canvas, cursorX + col * pixelSize, y0 + row * pixelSize, pixelSize, pixelSize, color);
         }
       }
     }
@@ -135,15 +126,15 @@ function savePng(canvas, filename) {
 
 function makeAppIcon(size, { maskable = false } = {}) {
   const canvas = createCanvas(size, size, TRANSPARENT);
-  const spacing = size * (maskable ? 0.13 : 0.155);
-  const maxHeight = size * (maskable ? 0.28 : 0.36);
   if (maskable) {
     fillRect(canvas, 0, 0, size, size, BRAND_BG, 0);
+    // Android's maskable-icon safe zone is the center ~80% of the canvas.
+    drawLogoMark(canvas, size, 0.62, BRAND_FG);
   } else {
-    const radius = Math.round(size * 0.24);
+    const radius = Math.round(size * LOGO_MARK_BG_RADIUS_RATIO);
     fillRoundedRect(canvas, 0, 0, size, size, radius, BRAND_BG);
+    drawLogoMark(canvas, size, 1, BRAND_FG);
   }
-  drawWaveformMark(canvas, size / 2, size / 2, spacing, maxHeight, BRAND_FG);
   return canvas;
 }
 
@@ -175,7 +166,6 @@ function buildIco(entries) {
   return Buffer.concat([header, ...dirEntries, ...dataBuffers]);
 }
 
-// App / favicon icons
 const icon512 = makeAppIcon(512);
 savePng(icon512, "icon-512.png");
 
@@ -203,22 +193,25 @@ const icoBuffer = buildIco([
 ]);
 writeFileSync(path.join(publicDir, "favicon.ico"), icoBuffer);
 
-// Open Graph placeholder image (1200x630)
 const og = createCanvas(1200, 630, [15, 13, 33, 255]);
 fillRect(og, 0, 0, 1200, 630, [15, 13, 33, 255]);
-drawWaveformMark(og, 600, 260, 44, 130, BRAND_FG);
+const ogMarkCanvas = { width: 1200, height: 630, data: og.data };
+const ogMarkSize = 300;
+const ogOffsetX = 600 - ogMarkSize / 2;
+const ogOffsetY = 260 - ogMarkSize / 2;
+for (const bar of LOGO_MARK_BARS) {
+  const w = bar.w * ogMarkSize;
+  const h = bar.h * ogMarkSize;
+  const x0 = Math.round(ogOffsetX + bar.x * ogMarkSize);
+  const y0 = Math.round(ogOffsetY + bar.y * ogMarkSize);
+  const radius = Math.max(1, Math.round((LOGO_MARK_BAR_RADIUS_RATIO * ogMarkSize) / 2));
+  fillRect(ogMarkCanvas, x0, y0, Math.round(w), Math.round(h), BRAND_FG, radius);
+}
 const text = "DOCTALK";
 const pixelSize = 10;
 const glyphAdvance = 6 * pixelSize;
 const textWidth = text.length * glyphAdvance - pixelSize;
-drawBitmapText(
-  og,
-  text,
-  Math.round(600 - textWidth / 2),
-  430,
-  pixelSize,
-  BRAND_FG,
-);
+drawBitmapText(og, text, Math.round(600 - textWidth / 2), 430, pixelSize, BRAND_FG);
 savePng(og, "og-image.png");
 
-console.log("Placeholder icons generated in /public");
+console.log("Icons generated in /public, matching components/ui/Logo.tsx's mark.");

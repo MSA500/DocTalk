@@ -29,14 +29,11 @@ function randomId(role: string) {
   return `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Powers the fullscreen voice call overlay (components/voice/VoiceCallOverlay.tsx).
-// Runs one of two modes behind the exact same returned interface:
-//  - Real mode: a live Vapi web call, custom-LLM-routed through
-//    POST /api/vapi/chat/completions (real RAG, real answers).
-//  - Demo mode: the original Phase 1.2 canned question/answer loop, used
-//    whenever Supabase/embedding/LLM/Vapi aren't all fully configured (see
-//    GET /api/config/status) — so the app degrades to an obvious demo
-//    instead of a broken real call.
+// Runs one of two modes behind the same returned interface: a real Vapi
+// call routed through /api/vapi/chat/completions, or a canned demo loop
+// used whenever Supabase/embedding/LLM/Vapi aren't all fully configured
+// (see GET /api/config/status) — so the app degrades to an obvious demo
+// instead of a broken real call.
 export function useVoiceCall(onClose: () => void) {
   const { showToast } = useToast();
 
@@ -61,7 +58,6 @@ export function useVoiceCall(onClose: () => void) {
     setTranscript((prev) => [...prev, { id: randomId(role), role, text }]);
   }
 
-  // ---- Real mode: start a live Vapi call, routed through our RAG pipeline ----
   useEffect(() => {
     isMountedRef.current = true;
     let cancelled = false;
@@ -103,9 +99,7 @@ export function useVoiceCall(onClose: () => void) {
           }
           setTranscript(historyMessages);
         }
-      } catch {
-        // Ignored — see comment above.
-      }
+      } catch {}
 
       try {
         const prepareRes = await fetch("/api/voice/prepare-call", { method: "POST" });
@@ -146,23 +140,11 @@ export function useVoiceCall(onClose: () => void) {
           }
         });
 
-        // model.url is overridden per call (rather than relying on a
-        // static dashboard value) to whatever origin this page is
-        // actually served from, so the same assistant config works across
-        // local-tunnel/staging/production without editing the Vapi
-        // dashboard each time. The call token (not the real session
-        // cookie, which is httpOnly and never reaches client JS) is passed
-        // via TWO redundant channels — see supabase/migrations/
-        // 0003_rag_and_conversation_history.sql and
-        // app/api/voice/prepare-call for why a token at all:
-        //  - assistantOverrides.metadata, which Vapi's own custom-LLM docs
-        //    confirm is forwarded as a `metadata` field directly in the
-        //    request body (CustomLLMModel's default metadataSendMode is
-        //    "variable") — the better-documented, body-based path.
-        //  - a custom header, kept as a second path in case metadata
-        //    forwarding and header forwarding behave differently in
-        //    practice than either is individually documented to.
-        // The server checks both (see app/api/vapi/chat/completions).
+        // model.url is set to this page's own origin so the same assistant
+        // config works across local/staging/production. The call token (see
+        // /api/voice/prepare-call) is sent via both metadata and a header,
+        // since only one is well-documented as reaching the custom-LLM
+        // request; the server checks both (/api/vapi/chat/completions).
         await vapi.start(status.vapiAssistantId as string, {
           metadata: { callToken: prepareBody.callToken as string },
           model: {
@@ -195,7 +177,6 @@ export function useVoiceCall(onClose: () => void) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Demo mode: the original canned question/answer loop ----
   useEffect(() => {
     if (!isDemoMode) return;
     const timer = setTimeout(() => {
@@ -247,10 +228,8 @@ export function useVoiceCall(onClose: () => void) {
     onClose();
   }
 
-  // Called by the overlay when the Typewriter finishes animating the
-  // latest assistant answer — demo mode moves to a timed "pause" before
-  // looping to the next canned question; real mode just goes straight back
-  // to listening, since the user (not a timer) decides when to speak next.
+  // Demo mode pauses before looping to the next canned question; real mode
+  // returns straight to listening since the user decides when to speak next.
   function handleAnswerTypewriterComplete() {
     setPhase(isDemoMode ? "pause" : "listening");
   }

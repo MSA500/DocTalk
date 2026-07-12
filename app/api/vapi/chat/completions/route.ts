@@ -6,21 +6,17 @@ import { searchDocumentChunks } from "@/lib/rag/search";
 import { buildMessagesForClassification, classifyRetrieval, NO_DOCUMENTS_ANSWER } from "@/lib/rag/prompt";
 import { logConversationTurn } from "@/lib/rag/history";
 import { resolveCallToken } from "@/lib/rag/call-token";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// The OpenAI-compatible "custom LLM" endpoint Vapi calls directly (server
-// to server) for every assistant turn — see the assistant's
-// model.provider="custom-llm"/model.url config. Vapi sends a standard
-// OpenAI chat-completions request ({ model, messages, stream, ... }) and
-// expects a standard OpenAI chat-completion response back, streamed as SSE
-// when stream:true (which Vapi always sends). This route resolves the
-// call_token query param (see /api/voice/prepare-call) back to a real
-// session_id, runs the same retrieve -> ground -> generate pipeline as
-// POST /api/rag/answer, and re-emits the LLM provider's plain-text deltas
-// as OpenAI-chunk-shaped SSE frames so the underlying provider stays fully
-// swappable — Vapi never sees which provider actually generated the text.
+// The OpenAI-compatible "custom LLM" endpoint Vapi calls server-to-server for
+// every assistant turn (model.provider="custom-llm"). Vapi sends a standard
+// OpenAI chat-completions request and expects the same shape back, streamed
+// as SSE. This resolves the call token (see /api/voice/prepare-call) back to
+// a session_id and re-emits the LLM provider's deltas as OpenAI-shaped SSE
+// frames, so the underlying provider stays swappable without Vapi knowing.
 
 type VapiChatMessage = { role: string; content: string };
 
@@ -100,21 +96,14 @@ export async function POST(request: Request) {
     body = {};
   }
 
-  // Three independent channels for the same call token, tried in order of
-  // how well-documented/reliable each is confirmed to be. The client (see
-  // lib/hooks/useVoiceCall.ts) currently sends both metadata and the
-  // header on every call; query string and top-level body.callToken are
-  // defensive fallbacks for assistant configs that might deliver it
-  // differently (e.g. metadataSendMode: "destructured").
+  // Multiple fallback channels for the call token — the client sends both
+  // metadata and the header; query/body are fallbacks for assistant configs
+  // that might deliver it differently (e.g. metadataSendMode: "destructured").
   const metadataToken = body.metadata?.callToken ?? null;
   const headerToken = request.headers.get("x-doctalk-call-token");
   const bodyToken = body.callToken ?? null;
   const queryToken = url.searchParams.get("callToken");
   const callToken = metadataToken || headerToken || bodyToken || queryToken;
-
-  console.log(
-    `/api/vapi/chat/completions: metadataToken=${metadataToken ? "present" : "absent"} headerToken=${headerToken ? "present" : "absent"} bodyToken=${bodyToken ? "present" : "absent"} queryToken=${queryToken ? "present" : "absent"} resolvedCallToken=${callToken ? "present" : "MISSING"}`,
-  );
 
   const model = body.model || "doctalk-rag";
   const wantsStream = body.stream !== false;
@@ -131,13 +120,17 @@ export async function POST(request: Request) {
   }
 
   const sessionId = callToken ? await resolveCallToken(supabase, callToken) : null;
-  console.log(`/api/vapi/chat/completions: resolved sessionId=${sessionId ?? "NONE"}`);
   if (!sessionId) {
     return respondWithFixedMessage(
       model,
       "I couldn't verify this call's session. Please try closing and reopening the call.",
       wantsStream,
     );
+  }
+
+  const rateLimit = checkRateLimit(`vapi:${sessionId}`, 40, 5 * 60 * 1000);
+  if (!rateLimit.allowed) {
+    return respondWithFixedMessage(model, "I'm getting a lot of questions right now — give me a moment and try again.", wantsStream);
   }
 
   const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
@@ -147,14 +140,9 @@ export async function POST(request: Request) {
     return respondWithFixedMessage(model, "I didn't catch a question — could you ask again?", wantsStream);
   }
 
-  console.log(`/api/vapi/chat/completions: question="${question}"`);
-
   try {
     const chunks = await searchDocumentChunks(supabase, sessionId, question);
     const classification = classifyRetrieval(chunks);
-    console.log(
-      `/api/vapi/chat/completions: classification=${classification} topSimilarity=${chunks[0]?.similarity ?? "n/a"}`,
-    );
     const referencedDocumentIds =
       classification === "none" ? [] : Array.from(new Set(chunks.map((chunk) => chunk.documentId)));
 
@@ -168,12 +156,6 @@ export async function POST(request: Request) {
 
     if (!wantsStream) {
       const answer = await provider.complete(messages);
-      // Logged here, before any further handling, specifically so a
-      // garbled-in-speech report can be checked against the exact raw text
-      // the LLM produced — if this log line already looks garbled, the
-      // problem is upstream of Vapi/TTS; if it reads cleanly, the problem
-      // is in Vapi's TTS pronunciation, not our pipeline.
-      console.log(`/api/vapi/chat/completions: raw answer text (non-streaming) = ${JSON.stringify(answer)}`);
       void logTurnSafely(supabase, sessionId, question, answer, referencedDocumentIds);
       return NextResponse.json(nonStreamingCompletion(provider.model, answer));
     }
@@ -195,9 +177,6 @@ export async function POST(request: Request) {
           fullAnswer = fullAnswer || fallbackMessage;
           console.error("Streaming answer failed:", err);
         } finally {
-          // Same reasoning as the non-streaming log above — this is the
-          // exact concatenation of every delta actually sent to Vapi.
-          console.log(`/api/vapi/chat/completions: raw answer text (streamed) = ${JSON.stringify(fullAnswer)}`);
           controller.close();
           void logTurnSafely(supabase, sessionId, question, fullAnswer, referencedDocumentIds);
         }

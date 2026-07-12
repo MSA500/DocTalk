@@ -16,7 +16,7 @@ export default function SettingsPage() {
         Settings
       </h1>
       <p className="mt-2 text-muted-foreground">
-        A placeholder settings screen. Nothing here is persisted yet.
+        Manage how DocTalk looks and how it&apos;s installed on this device.
       </p>
       <div className="mt-10">
         <SettingsForm />

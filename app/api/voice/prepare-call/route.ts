@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { createCallToken } from "@/lib/rag/call-token";
 import { SESSION_COOKIE, isValidSessionId } from "@/lib/session-cookie";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -10,20 +11,21 @@ function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
-// Vapi's servers call POST /api/vapi/chat/completions directly — a
-// server-to-server request with no browser cookies attached — so the real
-// doctalk-session id (httpOnly, never read by client JS by design) can't
-// reach it that way. The client calls this route first (same-origin, so
-// the httpOnly cookie *is* sent here), gets back a short-lived opaque
-// call_token, and hands only that token to Vapi via the assistant's
-// per-call model.url override. /api/vapi/chat/completions resolves the
-// token back to the real session_id server-side.
+// Vapi calls /api/vapi/chat/completions server-to-server with no browser
+// cookies, so the httpOnly session cookie can't reach it directly. The
+// client calls this route first (same-origin, cookie included) to get a
+// short-lived opaque call_token to hand to Vapi instead.
 export async function POST() {
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(SESSION_COOKIE)?.value;
     if (!isValidSessionId(sessionId)) {
       return errorResponse("NO_SESSION", "Missing session cookie.", 400);
+    }
+
+    const rateLimit = checkRateLimit(`prepare-call:${sessionId}`, 20, 5 * 60 * 1000);
+    if (!rateLimit.allowed) {
+      return errorResponse("RATE_LIMITED", "Too many requests. Please slow down and try again shortly.", 429);
     }
 
     const supabase = getSupabaseServerClient();

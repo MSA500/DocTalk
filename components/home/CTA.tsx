@@ -22,8 +22,7 @@ export function CTA() {
           Ready to talk to your documents?
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-brand-foreground/80">
-          Jump into the dashboard preview and see the voice assistant, upload
-          flow, and document library in action.
+          Open the dashboard to upload a document and start talking to it.
         </p>
         <Link
           href="/dashboard"

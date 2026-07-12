@@ -4,7 +4,7 @@ import { siteConfig } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   title: "About",
-  description: `Learn what ${siteConfig.name} is building and why.`,
+  description: `Learn how ${siteConfig.name} turns your documents into a conversation.`,
   alternates: {
     canonical: "/about",
   },
@@ -31,15 +31,28 @@ const values = [
   },
 ];
 
+const steps = [
+  {
+    title: "Upload",
+    description: "Add a PDF, Word document, or text file to your library.",
+  },
+  {
+    title: "Ask",
+    description: "Tap the mic and ask your question out loud, just like talking to a person.",
+  },
+  {
+    title: "Get a grounded answer",
+    description: "DocTalk retrieves the relevant passages and answers from them, spoken back to you in real time.",
+  },
+];
+
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
       <h1 className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
         About {siteConfig.name}
       </h1>
-      <p className="mt-4 text-lg text-muted-foreground">
-        {`${siteConfig.name} is a voice-enabled retrieval-augmented generation (RAG) assistant. This page is a Phase 1 placeholder — the final copy, team details, and roadmap will be filled in as the product takes shape.`}
-      </p>
+      <p className="mt-4 text-lg text-muted-foreground">{siteConfig.description}</p>
 
       <section aria-labelledby="values-heading" className="mt-12">
         <h2 id="values-heading" className="text-xl font-semibold text-foreground">
@@ -62,15 +75,23 @@ export default function AboutPage() {
         </ul>
       </section>
 
-      <section aria-labelledby="status-heading" className="mt-12 rounded-2xl border border-border bg-surface p-6">
-        <h2 id="status-heading" className="text-base font-semibold text-foreground">
-          Project status
+      <section aria-labelledby="how-it-works-heading" className="mt-12 rounded-2xl border border-border bg-surface p-6">
+        <h2 id="how-it-works-heading" className="text-base font-semibold text-foreground">
+          How it works
         </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This build is the Phase 1 frontend skeleton: layout, theming, and
-          interaction design only. Document processing, voice input, and
-          answer generation are not wired up yet.
-        </p>
+        <ol className="mt-4 space-y-4">
+          {steps.map((step, i) => (
+            <li key={step.title} className="flex gap-4">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-semibold text-brand">
+                {i + 1}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-foreground">{step.title}</p>
+                <p className="text-sm text-muted-foreground">{step.description}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
     </div>
   );
