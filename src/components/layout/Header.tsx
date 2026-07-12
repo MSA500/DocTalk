@@ -11,8 +11,19 @@ import { InstallAppButton } from "@/components/pwa/InstallAppButton";
 import { primaryNav } from "@/lib/site-config";
 import { cn } from "@/lib/utils";
 
+function matchesRoute(pathname: string, href: string): boolean {
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function getActiveHref(pathname: string): string | undefined {
+  return primaryNav
+    .filter((item) => matchesRoute(pathname, item.href))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+}
+
 export function Header() {
   const pathname = usePathname();
+  const activeHref = getActiveHref(pathname);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [lastPathname, setLastPathname] = useState(pathname);
 
@@ -43,10 +54,7 @@ export function Header() {
         <nav aria-label="Primary" className="hidden md:block">
           <ul className="flex items-center gap-1">
             {primaryNav.map((item) => {
-              const isActive =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
+              const isActive = item.href === activeHref;
               return (
                 <li key={item.href}>
                   <Link
@@ -113,10 +121,7 @@ export function Header() {
           >
             <ul className="flex flex-col gap-1 px-4 py-4 sm:px-6">
               {primaryNav.map((item) => {
-                const isActive =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
+                const isActive = item.href === activeHref;
                 return (
                   <li key={item.href}>
                     <Link

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { cookies } from "next/headers";
 import { displayFont, bodyFont } from "@/lib/fonts";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
@@ -79,7 +80,8 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const themeCookie = cookieStore.get(THEME_COOKIE)?.value;
-  const theme = isValidTheme(themeCookie) ? themeCookie : "light";
+  const hasThemeCookie = isValidTheme(themeCookie);
+  const theme = hasThemeCookie ? themeCookie : "light";
 
   return (
     <html
@@ -89,8 +91,13 @@ export default async function RootLayout({
       className={cn(displayFont.variable, bodyFont.variable, theme === "dark" && "dark")}
     >
       <body className="flex min-h-screen flex-col antialiased">
+        {!hasThemeCookie && (
+          <Script id="resolve-system-theme" strategy="beforeInteractive">
+            {`if(window.matchMedia('(prefers-color-scheme: dark)').matches){document.documentElement.classList.add('dark')}`}
+          </Script>
+        )}
         <JsonLd />
-        <ThemeProvider initialTheme={theme}>
+        <ThemeProvider initialTheme={theme} hasThemeCookie={hasThemeCookie}>
           <ToastProvider>
             <PwaInstallProvider>
               <AmbientBackground />

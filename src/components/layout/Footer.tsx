@@ -55,13 +55,10 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border pt-6 sm:flex-row">
+        <div className="mt-12 flex flex-col items-center gap-4 border-t border-border pt-6 sm:flex-row">
           <p className="text-sm text-muted-foreground">
             &copy; {new Date().getFullYear()} {siteConfig.name}. All rights
             reserved.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Built with Next.js
           </p>
         </div>
       </div>

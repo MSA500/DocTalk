@@ -41,12 +41,26 @@ function isTerminal(status: DocumentRecord["status"]): boolean {
   return status === "ready" || status === "failed";
 }
 
+// Module-scoped, not React state, so it survives template.tsx remounting
+// this hook's component on every navigation — repeat visits to Dashboard/
+// Documents render last-known documents immediately instead of a fresh
+// loading flash, while the effect below still revalidates in the background.
+let documentsCache: DocumentRecord[] | null = null;
+
 export function useDocumentWorkspace() {
   const { showToast } = useToast();
-  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [documents, setDocumentsState] = useState<DocumentRecord[]>(() => documentsCache ?? []);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => documentsCache === null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  function setDocuments(updater: DocumentRecord[] | ((prev: DocumentRecord[]) => DocumentRecord[])) {
+    setDocumentsState((prev) => {
+      const next = typeof updater === "function" ? (updater as (prev: DocumentRecord[]) => DocumentRecord[])(prev) : updater;
+      documentsCache = next;
+      return next;
+    });
+  }
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadsRef = useRef<Map<string, XMLHttpRequest>>(new Map());
   const pollIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
