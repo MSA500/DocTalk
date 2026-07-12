@@ -150,11 +150,15 @@ DocTalk is deployed on Vercel at [https://doc-talk-buddy.vercel.app](https://doc
 ## Project structure
 
 ```
-app/                  Next.js App Router pages and API routes
-components/           React components (dashboard, voice, layout, PWA, UI primitives)
-lib/                  Core logic: RAG pipeline, AI provider adapters, document processing, hooks
+src/app/              Next.js App Router pages and API routes
+src/components/       React components (dashboard, voice, layout, PWA, UI primitives)
+src/lib/              Core logic: RAG pipeline, AI provider adapters, document processing, hooks
+src/styles/           globals.css (Tailwind theme tokens, light/dark, keyframes)
+src/proxy.ts          Session cookie assignment (Next.js's "proxy," formerly "middleware")
 public/               Static assets, PWA manifest, service worker, offline fallback page
 samples/              Sample PDF/DOCX/TXT documents for testing the upload and RAG pipeline
 scripts/              One-off setup/build scripts (icon generation, sample docs, Vapi provisioning)
 supabase/migrations/  Database schema migrations, applied in order via the Supabase SQL editor
 ```
+
+Application code lives under `src/`; config files (`package.json`, `next.config.ts`, `tsconfig.json`), `public/`, `samples/`, `scripts/`, and `supabase/` stay at the project root, per Next.js's `src` folder convention.

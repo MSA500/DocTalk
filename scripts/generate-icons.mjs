@@ -61,7 +61,7 @@ function fillRect(canvas, x0, y0, w, h, color, radius = 0) {
   }
 }
 
-// Same 4-bar mark as components/ui/Logo.tsx's variant="mark" SVG (viewBox
+// Same 4-bar mark as src/components/ui/Logo.tsx's variant="mark" SVG (viewBox
 // 0 0 48 48), expressed as ratios so it rasterizes at any size and stays
 // pixel-proportional to the real logo used in the header.
 const LOGO_MARK_BARS = [
@@ -214,4 +214,4 @@ const textWidth = text.length * glyphAdvance - pixelSize;
 drawBitmapText(og, text, Math.round(600 - textWidth / 2), 430, pixelSize, BRAND_FG);
 savePng(og, "og-image.png");
 
-console.log("Icons generated in /public, matching components/ui/Logo.tsx's mark.");
+console.log("Icons generated in /public, matching src/components/ui/Logo.tsx's mark.");

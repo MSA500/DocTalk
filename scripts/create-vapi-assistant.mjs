@@ -56,7 +56,7 @@ const assistantConfig = {
   model: {
     provider: "custom-llm",
     model: "doctalk-rag",
-    // Overridden per call by lib/hooks/useVoiceCall.ts, but Vapi requires a
+    // Overridden per call by src/lib/hooks/useVoiceCall.ts, but Vapi requires a
     // valid value here at creation time.
     url: `${appUrl.replace(/\/$/, "")}/api/vapi`,
   },
