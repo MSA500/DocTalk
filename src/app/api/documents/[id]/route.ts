@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { deleteDocumentFile } from "@/lib/documents/storage";
+import { getProcessingProgress } from "@/lib/documents/process-document";
 import { SESSION_COOKIE, isValidSessionId } from "@/lib/session-cookie";
 import { toDocumentRecord, type DocumentRow } from "@/lib/types/document";
 
@@ -33,7 +34,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: { code: "NOT_FOUND", message: "Document not found." } }, { status: 404 });
     }
 
-    return NextResponse.json({ document: toDocumentRecord(data as DocumentRow) });
+    const row = data as DocumentRow;
+    const progress = await getProcessingProgress(supabase, row);
+    return NextResponse.json({ document: toDocumentRecord(row), progress });
   } catch (err) {
     return NextResponse.json(
       { error: { code: "SERVER_NOT_CONFIGURED", message: (err as Error).message } },

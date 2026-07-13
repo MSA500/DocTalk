@@ -1,6 +1,11 @@
 export type DocumentFileType = "pdf" | "docx" | "txt";
 export type DocumentStatus = "uploading" | "extracting" | "embedding" | "ready" | "failed";
 
+// Embedding progress for a document mid-processing: how many of its chunks
+// have embeddings so far. Lives here (not in the server-only processing
+// module) so client code can use the type without pulling in server code.
+export type ProcessingProgress = { total: number; embedded: number };
+
 export type DocumentRecord = {
   id: string;
   filename: string;

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getProcessingProgress } from "@/lib/documents/process-document";
 import { SESSION_COOKIE, isValidSessionId } from "@/lib/session-cookie";
-import { toDocumentRecord, type DocumentRow } from "@/lib/types/document";
+import { toDocumentRecord, type DocumentRow, type ProcessingProgress } from "@/lib/types/document";
 
 export const runtime = "nodejs";
 
@@ -28,8 +29,23 @@ export async function GET() {
       );
     }
 
+    const rows = data as DocumentRow[];
+
+    // Only in-progress documents need a (per-document count) progress lookup;
+    // ready/failed ones are the common case and skip it.
+    const progress: Record<string, ProcessingProgress> = {};
+    await Promise.all(
+      rows
+        .filter((row) => row.status === "embedding")
+        .map(async (row) => {
+          const p = await getProcessingProgress(supabase, row);
+          if (p) progress[row.id] = p;
+        }),
+    );
+
     return NextResponse.json({
-      documents: (data as DocumentRow[]).map(toDocumentRecord),
+      documents: rows.map(toDocumentRecord),
+      progress,
     });
   } catch (err) {
     return NextResponse.json(

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, FolderOpen, Loader2 } from "lucide-react";
 import type { DisplayDocument } from "@/lib/hooks/useDocumentWorkspace";
 import { DocumentCard } from "@/components/dashboard/DocumentCard";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
 
 type LibraryFilter = "all" | "processing";
@@ -30,6 +31,7 @@ export function DocumentLibrary({
   loadError = null,
 }: DocumentLibraryProps) {
   const [filter, setFilter] = useState<LibraryFilter>("all");
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; filename: string } | null>(null);
 
   const visibleDocuments = useMemo(
     () =>
@@ -102,12 +104,33 @@ export function DocumentLibrary({
           <ul className="grid grid-cols-1 gap-4">
             <AnimatePresence initial={false}>
               {visibleDocuments.map((document) => (
-                <DocumentCard key={document.id} document={document} onRemove={onRemove} />
+                <DocumentCard
+                  key={document.id}
+                  document={document}
+                  onRemove={() => setPendingDelete({ id: document.id, filename: document.filename })}
+                />
               ))}
             </AnimatePresence>
           </ul>
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete document?"
+        description={
+          pendingDelete
+            ? `"${pendingDelete.filename}" will be permanently removed. This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          if (pendingDelete) onRemove(pendingDelete.id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

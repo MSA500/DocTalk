@@ -14,7 +14,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { toDocumentRecord, type DocumentRow } from "@/lib/types/document";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ error: { code, message } }, { status });

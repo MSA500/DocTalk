@@ -4,10 +4,11 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useToast } from "@/components/ui/ToastProvider";
 import { getDocumentType, formatFileSize } from "@/lib/document-type";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/documents/validate-upload";
-import type { DocumentRecord } from "@/lib/types/document";
+import type { DocumentRecord, ProcessingProgress } from "@/lib/types/document";
 
 export type DisplayDocument = DocumentRecord & {
   uploadProgress?: number;
+  embeddingProgress?: ProcessingProgress;
 };
 
 type PendingUpload = {
@@ -17,8 +18,15 @@ type PendingUpload = {
   uploadProgress: number;
 };
 
-const POLL_INTERVAL_MS = 1500;
-const MAX_POLL_ATTEMPTS = 80; // ~2 minutes
+// Each /process call does one bounded step (extract, or one embed slice). The
+// client keeps calling until `done`. These bound the loop so a persistently
+// failing embedder can't spin forever — the document is just left resumable.
+const MAX_PROCESS_CALLS = 200;
+const MAX_STALLS = 10;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function validateClientSide(file: File): string | null {
   if (!getDocumentType(file.name)) {
@@ -37,8 +45,8 @@ function randomId(): string {
   return `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function isTerminal(status: DocumentRecord["status"]): boolean {
-  return status === "ready" || status === "failed";
+function isInProgress(status: DocumentRecord["status"]): boolean {
+  return status === "uploading" || status === "extracting" || status === "embedding";
 }
 
 // Module-scoped, not React state, so it survives template.tsx remounting
@@ -51,6 +59,7 @@ export function useDocumentWorkspace() {
   const { showToast } = useToast();
   const [documents, setDocumentsState] = useState<DocumentRecord[]>(() => documentsCache ?? []);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const [embeddingProgress, setEmbeddingProgress] = useState<Record<string, ProcessingProgress>>({});
   const [isLoading, setIsLoading] = useState(() => documentsCache === null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -61,18 +70,17 @@ export function useDocumentWorkspace() {
       return next;
     });
   }
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadsRef = useRef<Map<string, XMLHttpRequest>>(new Map());
-  const pollIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const activeProcessingRef = useRef<Set<string>>(new Set());
+  const cancelledProcessingRef = useRef<Set<string>>(new Set());
   const isMountedRef = useRef(true);
 
   useEffect(() => {
     isMountedRef.current = true;
-    const intervals = pollIntervalsRef.current;
     return () => {
       isMountedRef.current = false;
-      intervals.forEach((interval) => clearInterval(interval));
-      intervals.clear();
     };
   }, []);
 
@@ -87,7 +95,16 @@ export function useDocumentWorkspace() {
         if (!response.ok) {
           throw new Error(body?.error?.message || "Couldn't load your documents.");
         }
-        setDocuments(body.documents ?? []);
+        const loaded: DocumentRecord[] = body.documents ?? [];
+        setDocuments(loaded);
+        if (body.progress) setEmbeddingProgress(body.progress as Record<string, ProcessingProgress>);
+
+        // Resume any document left mid-pipeline (e.g. a large upload whose tab
+        // was closed, or one interrupted by a deploy). Each is idempotent and
+        // guarded against a duplicate loop.
+        for (const doc of loaded) {
+          if (isInProgress(doc.status)) runProcessing(doc.id);
+        }
       } catch (err) {
         if (!cancelled) setLoadError((err as Error).message);
       } finally {
@@ -99,97 +116,126 @@ export function useDocumentWorkspace() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function updateDocument(document: DocumentRecord) {
+  function updateDocument(document: DocumentRecord, progress?: ProcessingProgress) {
     if (!isMountedRef.current) return;
     setDocuments((docs) => {
       const exists = docs.some((doc) => doc.id === document.id);
       return exists ? docs.map((doc) => (doc.id === document.id ? document : doc)) : [document, ...docs];
     });
-  }
-
-  function stopPolling(id: string) {
-    const interval = pollIntervalsRef.current.get(id);
-    if (interval) {
-      clearInterval(interval);
-      pollIntervalsRef.current.delete(id);
-    }
-  }
-
-  function startPolling(id: string) {
-    stopPolling(id);
-    let attempts = 0;
-
-    const interval = setInterval(async () => {
-      attempts += 1;
-      if (attempts > MAX_POLL_ATTEMPTS) {
-        stopPolling(id);
-        return;
+    setEmbeddingProgress((prev) => {
+      if (progress && document.status === "embedding") {
+        return { ...prev, [document.id]: progress };
       }
-
-      try {
-        const response = await fetch(`/api/documents/${id}`);
-        if (!response.ok) return;
-        const body = await response.json();
-        if (!body?.document) return;
-
-        updateDocument(body.document);
-        if (isTerminal(body.document.status)) {
-          stopPolling(id);
-        }
-      } catch {
-        // Let the next tick (or /process's own response) resolve things.
-      }
-    }, POLL_INTERVAL_MS);
-
-    pollIntervalsRef.current.set(id, interval);
+      if (!prev[document.id]) return prev;
+      const next = { ...prev };
+      delete next[document.id];
+      return next;
+    });
   }
 
-  async function runProcessing(document: DocumentRecord) {
-    startPolling(document.id);
+  function clearProgress(id: string) {
+    setEmbeddingProgress((prev) => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  // Drives the document through the pipeline one bounded step at a time until
+  // it reaches a terminal state, this client stops (unmount/remove), or the
+  // loop gives up — in which case the document stays resumable on next load.
+  async function runProcessing(documentId: string) {
+    if (activeProcessingRef.current.has(documentId)) return;
+    activeProcessingRef.current.add(documentId);
+    cancelledProcessingRef.current.delete(documentId);
+
+    let stalls = 0;
+    let lastEmbedded = -1;
 
     try {
-      const response = await fetch(`/api/documents/${document.id}/process`, { method: "POST" });
-      const body = await response.json();
-      stopPolling(document.id);
+      for (let calls = 0; calls < MAX_PROCESS_CALLS; calls++) {
+        if (cancelledProcessingRef.current.has(documentId) || !isMountedRef.current) return;
 
-      if (response.ok && body?.document) {
-        updateDocument(body.document);
-        if (body.document.status === "ready") {
-          showToast({
-            variant: "success",
-            title: "Document ready",
-            description: `${body.document.filename} was processed and is ready to use.`,
-          });
-        } else if (body.document.status === "failed") {
-          showToast({
-            variant: "error",
-            title: "Processing failed",
-            description: body.document.errorMessage || `${body.document.filename} could not be processed.`,
-          });
+        let response: Response;
+        let body: {
+          document?: DocumentRecord;
+          progress?: ProcessingProgress;
+          done?: boolean;
+          retryable?: boolean;
+          error?: { message: string };
+        };
+        try {
+          response = await fetch(`/api/documents/${documentId}/process`, { method: "POST" });
+          body = await response.json();
+        } catch {
+          stalls += 1;
+          if (stalls > MAX_STALLS) break;
+          await delay(2000);
+          continue;
         }
-      } else {
+
+        if (cancelledProcessingRef.current.has(documentId) || !isMountedRef.current) return;
+
+        if (response.status === 429) {
+          stalls += 1;
+          if (stalls > MAX_STALLS) break;
+          await delay(4000);
+          continue;
+        }
+
+        if (!response.ok || body.error || !body.document) {
+          stalls += 1;
+          if (stalls > MAX_STALLS) break;
+          await delay(2000);
+          continue;
+        }
+
+        updateDocument(body.document, body.progress);
+
+        if (body.done) {
+          if (body.document.status === "ready") {
+            showToast({
+              variant: "success",
+              title: "Document ready",
+              description: `${body.document.filename} was processed and is ready to use.`,
+            });
+          } else if (body.document.status === "failed") {
+            showToast({
+              variant: "error",
+              title: "Processing failed",
+              description: body.document.errorMessage || `${body.document.filename} could not be processed.`,
+            });
+          }
+          return;
+        }
+
+        const embedded = body.progress?.embedded ?? lastEmbedded;
+        if (embedded > lastEmbedded) {
+          lastEmbedded = embedded;
+          stalls = 0;
+        } else {
+          stalls += 1;
+          if (stalls > MAX_STALLS) break;
+        }
+
+        await delay(body.retryable ? 2500 * Math.min(stalls + 1, 4) : 350);
+      }
+
+      // Loop cap or stall limit hit without finishing — leave it resumable.
+      if (!cancelledProcessingRef.current.has(documentId) && isMountedRef.current) {
         showToast({
           variant: "error",
-          title: "Processing failed",
-          description: body?.error?.message || "Something went wrong while processing this document.",
+          title: "Still processing",
+          description:
+            "This large document is taking a while. Its progress is saved — reload the page and it will pick up where it left off.",
         });
       }
-    } catch {
-      stopPolling(document.id);
-      // The row may have reached a terminal state server-side even though
-      // this request dropped — check once more before giving up.
-      try {
-        const response = await fetch(`/api/documents/${document.id}`);
-        const body = await response.json();
-        if (body?.document) updateDocument(body.document);
-      } catch {}
-      showToast({
-        variant: "error",
-        title: "Processing interrupted",
-        description: "A network error interrupted processing. It may still complete — check back shortly.",
-      });
+    } finally {
+      activeProcessingRef.current.delete(documentId);
     }
   }
 
@@ -237,7 +283,7 @@ export function useDocumentWorkspace() {
             description: document.errorMessage || `${document.filename} could not be uploaded.`,
           });
         } else {
-          runProcessing(document);
+          runProcessing(document.id);
         }
       } else {
         showToast({
@@ -271,7 +317,8 @@ export function useDocumentWorkspace() {
       return;
     }
 
-    stopPolling(id);
+    cancelledProcessingRef.current.add(id);
+    clearProgress(id);
     const previousDocuments = documents;
     setDocuments((docs) => docs.filter((doc) => doc.id !== id));
 
@@ -310,7 +357,7 @@ export function useDocumentWorkspace() {
       createdAt: new Date().toISOString(),
       uploadProgress: upload.uploadProgress,
     })),
-    ...documents,
+    ...documents.map((doc) => ({ ...doc, embeddingProgress: embeddingProgress[doc.id] })),
   ];
 
   return {

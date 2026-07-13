@@ -39,7 +39,16 @@ export function DocumentCard({ document, onRemove }: DocumentCardProps) {
   const isFailed = document.status === "failed";
   const isReady = document.status === "ready";
   const isInProgress = !isFailed && !isReady;
-  const showDeterminateProgress = document.status === "uploading" && typeof document.uploadProgress === "number";
+  const showUploadProgress = document.status === "uploading" && typeof document.uploadProgress === "number";
+  const embeddingProgress =
+    document.status === "embedding" && document.embeddingProgress && document.embeddingProgress.total > 0
+      ? document.embeddingProgress
+      : null;
+  const embeddingPercent = embeddingProgress
+    ? Math.min(100, Math.round((embeddingProgress.embedded / embeddingProgress.total) * 100))
+    : null;
+  const showDeterminateProgress = showUploadProgress || embeddingPercent !== null;
+  const determinatePercent = showUploadProgress ? document.uploadProgress! : (embeddingPercent ?? 0);
   const stageIndex = STAGES.findIndex((stage) => stage.key === document.status);
 
   return (
@@ -56,12 +65,12 @@ export function DocumentCard({ document, onRemove }: DocumentCardProps) {
         type="button"
         onClick={() => onRemove(document.id)}
         aria-label={`Remove ${document.filename}`}
-        className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-surface-alt hover:text-danger focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring group-hover:opacity-100"
+        className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground opacity-100 transition-opacity hover:bg-surface-alt hover:text-danger focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:opacity-0 sm:group-hover:opacity-100"
       >
         <X aria-hidden="true" className="h-4 w-4" />
       </button>
 
-      <div className="flex items-start gap-3 pr-6">
+      <div className="flex items-start gap-3 pr-10">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
           <FileText aria-hidden="true" className="h-5 w-5" />
         </div>
@@ -85,7 +94,7 @@ export function DocumentCard({ document, onRemove }: DocumentCardProps) {
           {STATUS_LABEL[document.status]}
         </span>
         {showDeterminateProgress && (
-          <span className="text-xs text-muted-foreground">{document.uploadProgress}%</span>
+          <span className="text-xs tabular-nums text-muted-foreground">{determinatePercent}%</span>
         )}
       </div>
 
@@ -140,15 +149,15 @@ export function DocumentCard({ document, onRemove }: DocumentCardProps) {
       {showDeterminateProgress && (
         <div
           role="progressbar"
-          aria-label={`${document.filename} upload progress`}
-          aria-valuenow={document.uploadProgress}
+          aria-label={`${document.filename} ${showUploadProgress ? "upload" : "embedding"} progress`}
+          aria-valuenow={determinatePercent}
           aria-valuemin={0}
           aria-valuemax={100}
           className="h-1.5 w-full overflow-hidden rounded-full bg-surface-alt"
         >
           <motion.div
             className="h-full rounded-full bg-brand"
-            animate={{ width: `${document.uploadProgress}%` }}
+            animate={{ width: `${determinatePercent}%` }}
             transition={{ duration: 0.3, ease: "easeOut" }}
           />
         </div>

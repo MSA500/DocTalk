@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Camera, Mail, Users, X as XIcon } from "lucide-react";
+import { Mail } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { FacebookIcon, InstagramIcon, XIcon } from "@/components/ui/BrandIcons";
 import { footerNav, siteConfig } from "@/lib/site-config";
 
 const socialLinks = [
-  { label: "Instagram", href: siteConfig.links.instagram, icon: Camera, ariaLabel: "Visit our Instagram", external: true },
-  { label: "Facebook", href: siteConfig.links.facebook, icon: Users, ariaLabel: "Visit our Facebook", external: true },
+  { label: "Instagram", href: siteConfig.links.instagram, icon: InstagramIcon, ariaLabel: "Visit our Instagram", external: true },
+  { label: "Facebook", href: siteConfig.links.facebook, icon: FacebookIcon, ariaLabel: "Visit our Facebook", external: true },
   { label: "X", href: siteConfig.links.x, icon: XIcon, ariaLabel: "Visit our X", external: true },
   { label: "Email", href: siteConfig.links.email, icon: Mail, ariaLabel: "Email us", external: false },
 ];
