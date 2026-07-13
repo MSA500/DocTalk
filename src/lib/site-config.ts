@@ -19,9 +19,10 @@ export const siteConfig = {
   creator: "DocTalk",
   themeColor: "#4f46e5",
   links: {
-    twitter: "#",
-    github: "#",
-    linkedin: "#",
+    instagram: "https://www.instagram.com",
+    facebook: "https://www.facebook.com",
+    x: "https://x.com",
+    email: "#",
   },
 } as const;
 

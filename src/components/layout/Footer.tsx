@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { Briefcase, Globe } from "lucide-react";
+import { Camera, Mail, Users, X as XIcon } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { footerNav, siteConfig } from "@/lib/site-config";
 
 const socialLinks = [
-  { label: "GitHub", href: siteConfig.links.github, icon: Globe },
-  { label: "LinkedIn", href: siteConfig.links.linkedin, icon: Briefcase },
+  { label: "Instagram", href: siteConfig.links.instagram, icon: Camera, ariaLabel: "Visit our Instagram", external: true },
+  { label: "Facebook", href: siteConfig.links.facebook, icon: Users, ariaLabel: "Visit our Facebook", external: true },
+  { label: "X", href: siteConfig.links.x, icon: XIcon, ariaLabel: "Visit our X", external: true },
+  { label: "Email", href: siteConfig.links.email, icon: Mail, ariaLabel: "Email us", external: false },
 ];
 
 export function Footer() {
@@ -24,7 +26,8 @@ export function Footer() {
                 <li key={social.label}>
                   <a
                     href={social.href}
-                    aria-label={social.label}
+                    aria-label={social.ariaLabel}
+                    {...(social.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                     className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     <social.icon aria-hidden="true" className="h-4 w-4" />
