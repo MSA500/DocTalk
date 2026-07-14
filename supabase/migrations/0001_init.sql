@@ -1,5 +1,3 @@
--- DocTalk Phase 2 — documents + document_chunks schema.
---
 -- No auth/user tables: documents are scoped by an anonymous `session_id`
 -- (a UUID stored in a cookie, see lib/session-cookie.ts), not a user_id.
 -- Conversation history (Phase 3) will be scoped the same way and stays

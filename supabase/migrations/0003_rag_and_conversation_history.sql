@@ -1,6 +1,3 @@
--- DocTalk Phase 3 — vector search RPC, global conversation history, and
--- voice-call token mapping.
---
 -- match_document_chunks(): the actual similarity search. A plain
 -- supabase-js .select() can't order by pgvector distance or join across
 -- documents/document_chunks in one query, so this is exposed as a

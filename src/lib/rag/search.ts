@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEmbeddingProvider } from "@/lib/ai/embeddings";
+import { normalizeSpokenClauseNumbers } from "@/lib/rag/normalize-spoken-numbers";
 
 export type RetrievedChunk = {
   chunkId: string;
@@ -30,7 +31,7 @@ export async function searchDocumentChunks(
   topK: number = DEFAULT_TOP_K,
 ): Promise<RetrievedChunk[]> {
   const provider = getEmbeddingProvider();
-  const [queryEmbedding] = await provider.embed([queryText]);
+  const [queryEmbedding] = await provider.embed([normalizeSpokenClauseNumbers(queryText)]);
 
   const { data, error } = await supabase.rpc("match_document_chunks", {
     query_embedding: queryEmbedding,
