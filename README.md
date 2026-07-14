@@ -11,46 +11,10 @@ DocTalk is a voice-powered document assistant. Upload your PDFs, Word documents,
 - **Database + storage:** Supabase (Postgres, pgvector, Storage)
 - **Embeddings:** Hugging Face (`sentence-transformers/all-MiniLM-L6-v2`, default) or OpenAI, swappable via env vars
 - **LLM:** Groq (`openai/gpt-oss-120b`, default) or OpenAI, swappable via env vars
-- **Voice:** Vapi (real-time speech-to-text, text-to-speech, and call orchestration)
+- **Voice:** Vapi (real-time speech-to-text via Deepgram, text-to-speech, and call orchestration)
 - **Document parsing:** `unpdf` (PDF), `mammoth` (DOCX)
 - **Animation:** Framer Motion
 - **PWA:** installable, with an offline fallback page and a service worker
-
-## Architecture: the RAG pipeline
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["Document ingestion"]
-        A["User uploads a PDF, DOCX, or TXT file"] --> B["POST /api/documents/upload<br/>validate + store raw file in Supabase Storage"]
-        B --> C["POST /api/documents/[id]/process"]
-        C --> D["Extract text<br/>unpdf / mammoth / plain read"]
-        D --> E["Chunk text<br/>lib/documents/chunk-text.ts"]
-        E --> F["Generate embeddings<br/>Hugging Face or OpenAI"]
-        F --> G[("Store chunks + vectors<br/>document_chunks (pgvector)")]
-    end
-
-    subgraph Query["Voice query"]
-        H["User asks a question by voice"] --> I["Vapi: speech-to-text"]
-        I --> J["POST /api/vapi/chat/completions"]
-        J --> K["Embed the question"]
-        K --> L["Vector similarity search<br/>match_document_chunks RPC"]
-        L --> M{"Similarity classification"}
-        M -->|confident| N["Build grounded prompt<br/>with retrieved excerpts"]
-        M -->|near-miss| O["Build clarifying prompt<br/>(\"did you mean...\")"]
-        M -->|none| P["Return a fixed \"not found\" answer<br/>no LLM call"]
-        N --> Q["Groq or OpenAI LLM<br/>generates a grounded answer"]
-        O --> Q
-        Q --> R["Stream the answer back to Vapi"]
-        P --> R
-        R --> S["Vapi: text-to-speech"]
-        S --> T["User hears the answer"]
-        Q --> U[("Log the turn<br/>conversation_turns")]
-    end
-
-    G -.->|retrieved by| L
-```
-
-Retrieval is grounded: if nothing relevant is found in the user's own documents, the LLM is never called and DocTalk says so plainly instead of guessing. See `lib/rag/prompt.ts` for the similarity-threshold logic behind the confident / near-miss / none classification.
 
 ## Environment variables
 
@@ -59,8 +23,8 @@ Copy `.env.local.example` to `.env.local` and fill in the values below. The exam
 | Variable | Required | Description |
 | --- | --- | --- |
 | `SUPABASE_URL` | Yes | Your Supabase project URL (Project Settings > API). |
-| `SUPABASE_ANON_KEY` | No | Client-safe key; not currently used by any code path. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only key, bypasses Row Level Security. Never expose to the client. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Same anon key as above, re-exposed under Next.js's `NEXT_PUBLIC_` prefix so the browser can read it. Required for uploads: the browser PUTs the file directly to Supabase Storage using this key to authenticate the request. Safe to expose — it grants no more access than the signed upload URL's own token already does for that one upload. |
 | `EMBEDDING_PROVIDER` | Yes | `huggingface` (default) or `openai`. |
 | `EMBEDDING_API_KEY` | Yes | API key for the embedding provider. |
 | `EMBEDDING_MODEL` | No | Overrides the provider's default embedding model. Changing dimension requires a DB migration — see `.env.local.example`. |
@@ -71,7 +35,9 @@ Copy `.env.local.example` to `.env.local` and fill in the values below. The exam
 | `VAPI_PRIVATE_KEY` | No | Server-only, used only by `scripts/create-vapi-assistant.mjs` to provision the assistant. |
 | `VAPI_ASSISTANT_ID` | Yes, for real voice calls | The Vapi assistant DocTalk's voice overlay connects to. |
 
-If `VAPI_PUBLIC_KEY` or `VAPI_ASSISTANT_ID` (or any embedding/LLM/Supabase variable) is missing, DocTalk automatically falls back to a demo mode for the voice overlay instead of failing outright.
+If `VAPI_PUBLIC_KEY` or `VAPI_ASSISTANT_ID` (or any embedding/LLM/Supabase variable) is missing, DocTalk automatically falls back to a demo mode for the voice overlay instead of failing outright. If `NEXT_PUBLIC_SUPABASE_ANON_KEY` is missing, document uploads fail with a clear "not configured" error rather than silently breaking.
+
+**Deploying to Vercel:** `NEXT_PUBLIC_*` variables are baked in at build time. Make sure `NEXT_PUBLIC_SUPABASE_ANON_KEY` is set in your Vercel project's environment variables *before* deploying — adding it after the fact requires a new deployment to take effect.
 
 ## Local development
 
@@ -91,9 +57,10 @@ If `VAPI_PUBLIC_KEY` or `VAPI_ASSISTANT_ID` (or any embedding/LLM/Supabase varia
    supabase/migrations/0001_init.sql
    supabase/migrations/0002_granular_processing_stages.sql
    supabase/migrations/0003_rag_and_conversation_history.sql
+   supabase/migrations/0004_direct_upload_bucket_size_limit.sql
    ```
 
-   This creates the `documents`, `document_chunks`, `conversation_turns`, and `voice_call_tokens` tables, enables the `pgvector` extension, sets up the vector similarity search function, and creates a private `documents` storage bucket.
+   This creates the `documents`, `document_chunks`, `conversation_turns`, and `voice_call_tokens` tables, enables the `pgvector` extension, sets up the vector similarity search function, creates a private `documents` storage bucket, and caps that bucket's file size at 15 MB at the Storage layer itself.
 
 3. **Configure environment variables**
 
@@ -138,9 +105,9 @@ If `VAPI_PUBLIC_KEY` or `VAPI_ASSISTANT_ID` (or any embedding/LLM/Supabase varia
 DocTalk is deployed on Vercel at [https://doc-talk-buddy.vercel.app](https://doc-talk-buddy.vercel.app).
 
 1. Push the repository to GitHub and import it into [Vercel](https://vercel.com/new).
-2. Add all required environment variables (see the table above) in the Vercel project's settings.
+2. Add all required environment variables (see the table above) in the Vercel project's settings — including `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which uploads depend on.
 3. Deploy. Vercel builds and serves the app automatically on every push.
-4. Run the Supabase migrations against your production database, if you haven't already (see step 2 under Local development).
+4. Run the Supabase migrations against your production database, if you haven't already (see step 2 under Local development), including `0004_direct_upload_bucket_size_limit.sql`.
 5. Provision or update the Vapi assistant so `model.url` points at your live deployment URL:
 
    ```bash
@@ -159,6 +126,7 @@ public/               Static assets, PWA manifest, service worker, offline fallb
 samples/              Sample PDF/DOCX/TXT documents for testing the upload and RAG pipeline
 scripts/              One-off setup/build scripts (icon generation, sample docs, Vapi provisioning)
 supabase/migrations/  Database schema migrations, applied in order via the Supabase SQL editor
+pipeline.md           Full step-by-step description of both end-to-end flows
 ```
 
 Application code lives under `src/`; config files (`package.json`, `next.config.ts`, `tsconfig.json`), `public/`, `samples/`, `scripts/`, and `supabase/` stay at the project root, per Next.js's `src` folder convention.
