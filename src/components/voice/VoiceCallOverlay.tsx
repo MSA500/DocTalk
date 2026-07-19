@@ -18,7 +18,18 @@ function formatDuration(totalSeconds: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
+export function VoiceCallOverlay({
+  onClose,
+  showHeaderCloseButton = true,
+}: {
+  onClose: () => void;
+  // /voice/embed (DocTalk Mobile's WebView) already renders its own native
+  // close control, positioned opposite this one — leaving both on screen
+  // gave the embedded call two close/X buttons stacked at the top. The red
+  // "End call" control below is unaffected; it's the primary hang-up action
+  // either way, this only removes the redundant header X.
+  showHeaderCloseButton?: boolean;
+}) {
   const {
     isDemoMode,
     connectionError,
@@ -107,14 +118,18 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
         className="flex h-full w-full flex-col bg-background outline-none sm:h-[92vh] sm:max-w-2xl sm:rounded-3xl sm:border sm:border-border sm:shadow-2xl"
       >
         <header className="flex items-center justify-between border-b border-border px-5 py-4">
-          <button
-            type="button"
-            onClick={hangUp}
-            aria-label="Close voice call"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <X aria-hidden="true" className="h-5 w-5" />
-          </button>
+          {showHeaderCloseButton ? (
+            <button
+              type="button"
+              onClick={hangUp}
+              aria-label="Close voice call"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <X aria-hidden="true" className="h-5 w-5" />
+            </button>
+          ) : (
+            <div aria-hidden="true" className="h-9 w-9" />
+          )}
           <div className="flex items-center gap-2">
             {isDemoMode && (
               <span className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-medium text-muted-foreground">

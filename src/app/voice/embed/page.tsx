@@ -23,5 +23,5 @@ export default function VoiceEmbedPage() {
     window.ReactNativeWebView?.postMessage(JSON.stringify({ type: "close" }));
   };
 
-  return <VoiceCallOverlay onClose={handleClose} />;
+  return <VoiceCallOverlay onClose={handleClose} showHeaderCloseButton={false} />;
 }
