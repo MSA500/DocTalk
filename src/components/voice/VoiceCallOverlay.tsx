@@ -8,6 +8,7 @@ import { MicButton } from "@/components/voice/MicButton";
 import { Waveform } from "@/components/voice/Waveform";
 import { Typewriter } from "@/components/ui/Typewriter";
 import { useVoiceCall } from "@/lib/hooks/useVoiceCall";
+import { useHasMounted } from "@/lib/hooks/useHasMounted";
 import { PHASE_LABEL } from "@/lib/voice-phase";
 import { cn } from "@/lib/utils";
 
@@ -39,12 +40,9 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
   // component was gated behind client-only state on /dashboard, so it was
   // never actually server-rendered — /voice/embed renders it unconditionally
   // as page content, which put it through SSR for the first time and
-  // surfaced this. `mounted` defers the portal to after hydration, when
+  // surfaced this. useHasMounted defers the portal to after hydration, when
   // `document` is guaranteed to exist.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const hasMounted = useHasMounted();
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -86,7 +84,7 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
 
   const statusLabel = isMuted ? "Muted" : PHASE_LABEL[phase];
 
-  if (!mounted) return null;
+  if (!hasMounted) return null;
 
   return createPortal(
     <motion.div
