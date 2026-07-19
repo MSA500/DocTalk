@@ -5,6 +5,7 @@ import { displayFont, bodyFont } from "@/lib/fonts";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { SiteChrome } from "@/components/layout/SiteChrome";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { PwaInstallProvider } from "@/components/pwa/PwaInstallProvider";
@@ -107,11 +108,15 @@ export default async function RootLayout({
               >
                 Skip to main content
               </a>
-              <Header />
+              <SiteChrome>
+                <Header />
+              </SiteChrome>
               <main id="main-content" className="flex-1">
                 {children}
               </main>
-              <Footer />
+              <SiteChrome>
+                <Footer />
+              </SiteChrome>
               <ServiceWorkerRegister />
             </PwaInstallProvider>
           </ToastProvider>
