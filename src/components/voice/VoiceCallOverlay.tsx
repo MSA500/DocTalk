@@ -34,6 +34,18 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // document.body (below, for the portal target) is a browser global that
+  // doesn't exist during server rendering. Every prior mount of this
+  // component was gated behind client-only state on /dashboard, so it was
+  // never actually server-rendered — /voice/embed renders it unconditionally
+  // as page content, which put it through SSR for the first time and
+  // surfaced this. `mounted` defers the portal to after hydration, when
+  // `document` is guaranteed to exist.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -73,6 +85,8 @@ export function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
   }, []);
 
   const statusLabel = isMuted ? "Muted" : PHASE_LABEL[phase];
+
+  if (!mounted) return null;
 
   return createPortal(
     <motion.div
