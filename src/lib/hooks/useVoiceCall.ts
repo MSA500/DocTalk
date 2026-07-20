@@ -34,7 +34,7 @@ function randomId(role: string) {
 // used whenever Supabase/embedding/LLM/Vapi aren't all fully configured
 // (see GET /api/config/status) — so the app degrades to an obvious demo
 // instead of a broken real call.
-export function useVoiceCall(onClose: () => void) {
+export function useVoiceCall(onClose: () => void, onError?: (message: string) => void) {
   const { showToast } = useToast();
 
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
@@ -48,10 +48,16 @@ export function useVoiceCall(onClose: () => void) {
   const vapiRef = useRef<Vapi | null>(null);
   const isMountedRef = useRef(true);
   const onCloseRef = useRef(onClose);
+  const onErrorRef = useRef(onError);
+  const hadErrorRef = useRef(false);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   function appendMessage(role: "user" | "assistant", text: string) {
     if (!isMountedRef.current) return;
@@ -116,10 +122,16 @@ export function useVoiceCall(onClose: () => void) {
           if (isMountedRef.current) setPhase("listening");
         });
         vapi.on("call-end", () => {
-          if (isMountedRef.current) onCloseRef.current();
+          if (!isMountedRef.current) return;
+          if (hadErrorRef.current && onErrorRef.current) {
+            onErrorRef.current("The voice call ended unexpectedly. Please try again.");
+          } else {
+            onCloseRef.current();
+          }
         });
         vapi.on("error", (err) => {
           console.error("Vapi call error:", err);
+          hadErrorRef.current = true;
           if (!isMountedRef.current) return;
           showToast({
             variant: "error",
@@ -158,6 +170,7 @@ export function useVoiceCall(onClose: () => void) {
         if (cancelled) return;
         console.error("Failed to start voice call:", err);
         setConnectionError((err as Error).message || "Could not start the call.");
+        onErrorRef.current?.("The voice call couldn't start. Please try again.");
         showToast({
           variant: "error",
           title: "Couldn't start the call",

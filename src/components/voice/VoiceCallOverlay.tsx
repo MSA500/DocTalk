@@ -20,9 +20,15 @@ function formatDuration(totalSeconds: number) {
 
 export function VoiceCallOverlay({
   onClose,
+  onError,
   showHeaderCloseButton = true,
 }: {
   onClose: () => void;
+  // Optional host-error callback. /voice/embed (DocTalk Mobile's WebView)
+  // passes this to be told when a call fails rather than ends normally, so
+  // the native shell can offer a retry. /dashboard passes nothing, leaving
+  // behavior unchanged.
+  onError?: (message: string) => void;
   // /voice/embed (DocTalk Mobile's WebView) already renders its own native
   // close control, positioned opposite this one — leaving both on screen
   // gave the embedded call two close/X buttons stacked at the top. The red
@@ -39,7 +45,7 @@ export function VoiceCallOverlay({
     toggleMute,
     hangUp,
     handleAnswerTypewriterComplete,
-  } = useVoiceCall(onClose);
+  } = useVoiceCall(onClose, onError);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);

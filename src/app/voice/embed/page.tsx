@@ -23,5 +23,11 @@ export default function VoiceEmbedPage() {
     window.ReactNativeWebView?.postMessage(JSON.stringify({ type: "close" }));
   };
 
-  return <VoiceCallOverlay onClose={handleClose} showHeaderCloseButton={false} />;
+  const handleError = (message: string) => {
+    window.ReactNativeWebView?.postMessage(JSON.stringify({ type: "error", message }));
+  };
+
+  return (
+    <VoiceCallOverlay onClose={handleClose} onError={handleError} showHeaderCloseButton={false} />
+  );
 }
