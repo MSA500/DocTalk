@@ -88,16 +88,28 @@ export function VoiceCallOverlay({
   }, []);
 
   // Re-pins scroll on any content resize, including mid-typewriter growth.
+  // Depends on hasMounted: the portal (and therefore these refs) only exists
+  // once mounted, so this must re-run when hasMounted flips true, otherwise it
+  // would run once against null refs and never attach.
   useEffect(() => {
+    if (!hasMounted) return;
     const content = contentRef.current;
     const scrollEl = scrollRef.current;
     if (!content || !scrollEl) return;
+    scrollEl.scrollTop = scrollEl.scrollHeight;
     const observer = new ResizeObserver(() => {
       scrollEl.scrollTop = scrollEl.scrollHeight;
     });
     observer.observe(content);
     return () => observer.disconnect();
-  }, []);
+  }, [hasMounted]);
+
+  // Pin to the newest message as the transcript grows or the phase changes.
+  useEffect(() => {
+    if (!hasMounted) return;
+    const scrollEl = scrollRef.current;
+    if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+  }, [hasMounted, transcript, phase]);
 
   const statusLabel = isMuted ? "Muted" : PHASE_LABEL[phase];
 
